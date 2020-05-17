@@ -1,6 +1,6 @@
 country,code_2,code_3,country_code,iso_3166_2,continent,sub_region,region_code,sub_region_code
 Afghanistan,AF,AFG,4,ISO 3166-2:AF,Asia,Southern Asia,142,34
-Åland Islands,AX,ALA,248,ISO 3166-2:AX,Europe,Northern Europe,150,154
+Ã…land Islands,AX,ALA,248,ISO 3166-2:AX,Europe,Northern Europe,150,154
 Albania,AL,ALB,8,ISO 3166-2:AL,Europe,Southern Europe,150,39
 Algeria,DZ,DZA,12,ISO 3166-2:DZ,Africa,Northern Africa,2,15
 American Samoa,AS,ASM,16,ISO 3166-2:AS,Oceania,Polynesia,9,61
@@ -53,10 +53,10 @@ Congo,CG,COG,178,ISO 3166-2:CG,Africa,Middle Africa,2,17
 Congo (Democratic Republic of the),CD,COD,180,ISO 3166-2:CD,Africa,Middle Africa,2,17
 Cook Islands,CK,COK,184,ISO 3166-2:CK,Oceania,Polynesia,9,61
 Costa Rica,CR,CRI,188,ISO 3166-2:CR,Americas,Central America,19,13
-Côte d'Ivoire,CI,CIV,384,ISO 3166-2:CI,Africa,Western Africa,2,11
+CÃ´te d'Ivoire,CI,CIV,384,ISO 3166-2:CI,Africa,Western Africa,2,11
 Croatia,HR,HRV,191,ISO 3166-2:HR,Europe,Southern Europe,150,39
 Cuba,CU,CUB,192,ISO 3166-2:CU,Americas,Caribbean,19,29
-Curaçao,CW,CUW,531,ISO 3166-2:CW,Americas,Caribbean,19,29
+CuraÃ§ao,CW,CUW,531,ISO 3166-2:CW,Americas,Caribbean,19,29
 Cyprus,CY,CYP,196,ISO 3166-2:CY,Asia,Western Asia,142,145
 Czech Republic,CZ,CZE,203,ISO 3166-2:CZ,Europe,Eastern Europe,150,151
 Denmark,DK,DNK,208,ISO 3166-2:DK,Europe,Northern Europe,150,154
@@ -179,11 +179,11 @@ Poland,PL,POL,616,ISO 3166-2:PL,Europe,Eastern Europe,150,151
 Portugal,PT,PRT,620,ISO 3166-2:PT,Europe,Southern Europe,150,39
 Puerto Rico,PR,PRI,630,ISO 3166-2:PR,Americas,Caribbean,19,29
 Qatar,QA,QAT,634,ISO 3166-2:QA,Asia,Western Asia,142,145
-Réunion,RE,REU,638,ISO 3166-2:RE,Africa,Eastern Africa,2,14
+RÃ©union,RE,REU,638,ISO 3166-2:RE,Africa,Eastern Africa,2,14
 Romania,RO,ROU,642,ISO 3166-2:RO,Europe,Eastern Europe,150,151
 Russian Federation,RU,RUS,643,ISO 3166-2:RU,Europe,Eastern Europe,150,151
 Rwanda,RW,RWA,646,ISO 3166-2:RW,Africa,Eastern Africa,2,14
-Saint Barthélemy,BL,BLM,652,ISO 3166-2:BL,Americas,Caribbean,19,29
+Saint BarthÃ©lemy,BL,BLM,652,ISO 3166-2:BL,Americas,Caribbean,19,29
 "Saint Helena, Ascension and Tristan da Cunha",SH,SHN,654,ISO 3166-2:SH,Africa,Western Africa,2,11
 Saint Kitts and Nevis,KN,KNA,659,ISO 3166-2:KN,Americas,Caribbean,19,29
 Saint Lucia,LC,LCA,662,ISO 3166-2:LC,Americas,Caribbean,19,29
