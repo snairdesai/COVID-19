@@ -1,0 +1,64 @@
+
+<table style="text-align:center"><caption><strong>Cox Proportional Hazards Regression: Duration to Peak Mortality</strong></caption>
+<tr><td colspan="3" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left"></td><td colspan="2"><em>Dependent variable:</em></td></tr>
+<tr><td></td><td colspan="2" style="border-bottom: 1px solid black"></td></tr>
+<tr><td style="text-align:left"></td><td>Survival Probability of Mortality Peaking at Time (t)</td><td>Survival Probability of Case Peaking at Time (t)</td></tr>
+<tr><td style="text-align:left"></td><td>(1)</td><td>(2)</td></tr>
+<tr><td colspan="3" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left">Log(Peak Mortality)</td><td>-0.404<sup>**</sup></td><td></td></tr>
+<tr><td style="text-align:left"></td><td>(0.193)</td><td></td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td></tr>
+<tr><td style="text-align:left">Log(Early Mortality)</td><td>1.271<sup>***</sup></td><td></td></tr>
+<tr><td style="text-align:left"></td><td>(0.234)</td><td></td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td></tr>
+<tr><td style="text-align:left">Early Mortality Growth</td><td>0.049</td><td></td></tr>
+<tr><td style="text-align:left"></td><td>(0.205)</td><td></td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td></tr>
+<tr><td style="text-align:left">Log(Peak Case)</td><td></td><td>0.411</td></tr>
+<tr><td style="text-align:left"></td><td></td><td>(0.251)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td></tr>
+<tr><td style="text-align:left">Log(Early Case)</td><td></td><td>0.726<sup>***</sup></td></tr>
+<tr><td style="text-align:left"></td><td></td><td>(0.191)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td></tr>
+<tr><td style="text-align:left">Early Case Growth</td><td></td><td>0.419<sup>*</sup></td></tr>
+<tr><td style="text-align:left"></td><td></td><td>(0.227)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td></tr>
+<tr><td style="text-align:left">Early Stringency</td><td>0.040<sup>*</sup></td><td>0.032</td></tr>
+<tr><td style="text-align:left"></td><td>(0.020)</td><td>(0.021)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td></tr>
+<tr><td style="text-align:left">Stringency Growth to Maximum</td><td>0.017</td><td>0.025</td></tr>
+<tr><td style="text-align:left"></td><td>(0.020)</td><td>(0.017)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td></tr>
+<tr><td style="text-align:left">Early Mobility</td><td>-0.007</td><td>0.007</td></tr>
+<tr><td style="text-align:left"></td><td>(0.009)</td><td>(0.008)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td></tr>
+<tr><td style="text-align:left">Prop. 65+</td><td>0.064<sup>*</sup></td><td>0.195<sup>***</sup></td></tr>
+<tr><td style="text-align:left"></td><td>(0.036)</td><td>(0.056)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td></tr>
+<tr><td style="text-align:left">Prop. Urban</td><td>0.006</td><td>-0.018</td></tr>
+<tr><td style="text-align:left"></td><td>(0.019)</td><td>(0.018)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td></tr>
+<tr><td style="text-align:left">Pop. Density</td><td>0.0004<sup>**</sup></td><td>-0.001</td></tr>
+<tr><td style="text-align:left"></td><td>(0.0002)</td><td>(0.0004)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td></tr>
+<tr><td style="text-align:left">Vulnerable Emp.</td><td>0.041<sup>**</sup></td><td>0.032</td></tr>
+<tr><td style="text-align:left"></td><td>(0.020)</td><td>(0.027)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td></tr>
+<tr><td style="text-align:left">Log(GNI)</td><td>-0.143</td><td>-0.658</td></tr>
+<tr><td style="text-align:left"></td><td>(0.409)</td><td>(0.629)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td></tr>
+<tr><td style="text-align:left">EIU Democracy</td><td>0.007</td><td>-0.013</td></tr>
+<tr><td style="text-align:left"></td><td>(0.010)</td><td>(0.010)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td></tr>
+<tr><td style="text-align:left">Latitude-Longitude</td><td>-0.0003<sup>***</sup></td><td>-0.00004</td></tr>
+<tr><td style="text-align:left"></td><td>(0.0001)</td><td>(0.0001)</td></tr>
+<tr><td style="text-align:left"></td><td></td><td></td></tr>
+<tr><td colspan="3" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left">PH Test p-value</td><td>0.238</td><td>0.919</td></tr>
+<tr><td style="text-align:left">Observations</td><td>49</td><td>49</td></tr>
+<tr><td style="text-align:left">R<sup>2</sup></td><td>0.768</td><td>0.694</td></tr>
+<tr><td style="text-align:left">Log Likelihood</td><td>-108.749</td><td>-87.905</td></tr>
+<tr><td style="text-align:left">Wald Test</td><td>49.000<sup>***</sup></td><td>39.580<sup>***</sup></td></tr>
+<tr><td style="text-align:left">LR Test</td><td>71.634<sup>***</sup></td><td>58.043<sup>***</sup></td></tr>
+<tr><td colspan="3" style="border-bottom: 1px solid black"></td></tr><tr><td style="text-align:left"><em>Note:</em></td><td colspan="2" style="text-align:left">*,**,*** correspond to 10%, 5% and 1% significance, respectively.</td></tr>
+<tr><td style="text-align:left"></td><td colspan="2" style="text-align:left">PH Test refers to testing the proportional hazards assumption (Grambsch and Therneau (1994)).</td></tr>
+<tr><td style="text-align:left"></td><td colspan="2" style="text-align:left">Null hypothesis is the assumption is not violated.</td></tr>
+</table>
