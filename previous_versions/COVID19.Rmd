@@ -1,0 +1,147 @@
+---
+title: "COVID19"
+author: "Rashad Ahmed, Joshua Aizenman, Yothin Jinjarak, Sameer Nair-Desai, Weining Xin"
+date: "13 April 2020"
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+---
+
+## Research Plan
+
+Timetable: 
+
+- 2020-03-22: 1st meeting
+- 2020-03-29: 2nd meeting
+- 2020-04-05: 3rd meeting
+- 2020-04-12: 4th meeting
+- 2020-04-19: 5th meeting
+- meanwhile : organizing data and estimating with 7-day rolling average of new deaths
+- 2020-05-01: having 75 days of data collected; running cross-country regression and drafting paper
+- 2020-06-01: NBER WP
+
+## Empirical Analysis
+
+Our baseline estimation uses OECD and EMs samples. We proceed the analysis in the following order:
+
+### A Pilot Analysis
+We start with a pilot panel study of the first 75 days of the pandemic, using 7-day rolling average of new deaths (see Bloomberg's), accounting for policy intervention (see Oxford's). The testing hypothesis is to what degree lagged policy impacting spell duration of the first cycles and the peaks of mortality per capita, conditioning on a significant increase (acceleration and deceleration) of mortality.
+
+#### Empirical Specification:
+
+Our first benchmark specification is the panel daily estimation of the mortality rate. We examine mortality per capita (regardless of avoidability) of country $i$ at date $t$, $MortalRate_{i,t}$, measured in $T=7$-day rolling averages, as a function of lagged policy intervention [1-week; 2-week; 3-week], $GovInt_{i,t}$, and a set of controls, $X_{i,t}$, including lagged testing capacity, interaction of policy indicators with quality of institutions, enforcement [cellphone apps] preventive measures, gravity measures to PRC, geographical controls/climate), and socioeconomic and geographical indicators. Several conditioning factors are in order:
+
+- Size and governance: Singapore is a city state, where most policies are determined by the center.  The US is the opposite, where most policies are localized at the level of each state, and sometimes municipalities.
+- Geographical factors: proximity to China, Korea, Taiwan, Singapore.
+- Time of first significant mortality, and accumulated experience in countries that were affected earlier may impact policies in countries that were exposed at a later stage, and this effect may be subject to geographical factors.
+
+[1] $$MortalRate_{i,t}=\alpha_{i}+\gamma*GovInt_{i,t}+\sigma*X_{i,t}+\epsilon_{i,t}$$
+
+<!--
+##### Dynamic Panel Model:
+Our first benchmark specification is
+
+[1-1] $$MortalRate_{i,t}=\alpha_{i} + \gamma*GovInt_{i,t-1} + \sigma*X_{i,t}+\epsilon_{i,t}.$$
+If we assume that government interventions in period $t-1$ are affected by mortality rates in previous period, i.e., $t-2$, then we should control mortality rate in period $t-2$ and have
+
+[1-2] $$MortalRate_{i,t}=\alpha_{i} + \gamma*GovInt_{i,t-1} + \beta*MortalRate_{i,t-2} + \sigma*X_{i,t} + \epsilon_{i,t}.$$
+After controlling for mortality rate in period $t-2$, we have a dynamic panel model and the endogeneity issue passes from government interventions to lagged mortality rate. To estimate this dynamic panel model, we can use Arellano-Bond estimator (<http://people.stern.nyu.edu/wgreene/Econometrics/Arellano-Bond.pdf>). First we take the first difference to eliminate the fixed effect,
+
+[1-3] $$\Delta MortalRate_{i,t} = \gamma*\Delta GovInt_{i,t-1} + \beta*\Delta MortalRate_{i,t-2} + \sigma*\Delta X_{i,t} + \Delta \epsilon_{i,t}.$$
+
+Then we use $MortalRate_{i,t-3}$ as an instrument and estimate a GMM estimator based on the following moment condition:
+
+[1-4] $$\mathbb{E}(MortalRate_{i,t-3}*\Delta \epsilon_{i,t}) = 0.$$-->
+
+Our second benchmark specification is the Cox Proportional Hazards model. This survival regression model examines the association between a set of predictors (i.e. country-specific government responses to COVID-19) and the time-to-event (i.e. time-to-peak of COVID-19 deaths) through the hazard function. 
+
+[2] $$h(MortalPeak|GovInt,X)=h_{0}e^{\beta_{1}g_{1}+...+\beta_{1}g_{1}+\theta_{1}x_{1}+...+\theta_{1}x_{1}+u}$$
+
+where $h(MortalPeak|x)$ is the hazard at time $MortalPeak$ for a country with a set of government responses $x_{1},...,x_{p}$; $h_{0}$ is the baseline hazard function; and $\beta_{1},...,\beta_{p}$ are the model parameters describing the effect of the government responses on the overall hazard. The assumption is that the government responses have a time-invariant multiplicative effect on the hazard of COVID-19 deaths (see George et al. (2014) for a review of survival methods).
+
+### Cross-Country estimation
+We follow with a cross-country analysis accounting for the key moments of the mortality per capita (adjusted for age demographics) in quasi-bell curve. Dependent variables are dimensions of the 'quasi-bell shapes' (e.g. see Bloomberg's figures), normalized by the day of first significant death per capita. Based on the pilot regressions, the full cross-country sample starts with data on 2020-05-01; most OECD and EMs finished the first round of dynamics of COVID-19 pandemic in terms of contagion per capita, and fatality per capita 
+
+*Dependent variables*: (a) time to reach the top of the curve (duration of the spells, e.g. Bloomberg's numbers); (b) facilities per capita at the top of the curves; (c) mortality during the first *T* days (probably 80 or 90); (d) contagion per capita; (e) mortality/contagion. We focus on mortality per capita, and not the infection data; both are subject to information and policy and regime biases, mortality data tends to be more accurate.
+
+*Explanatory variables*: population weighted density (accounting for under-reporting practices), socioeconomic indicators (country fixed effects), testing/capita during the spell and during the increasing paths (limited explanatory power due to its low prevalence and reporting accuracy in most countries), intervention policies (policy controls from the Oxford data). Controlling variables include: Rodrik (1999), tourism in and out per capita, quality of democracy [EIU data], urban population ratio, Urban Density, more or less centralized Federal system, cell phone per capita, police numbers per capita; army numbers per capita, stringency of COVID regulation during the first, second and 3 rd upward (de jure v de facto), policy/army mobilization, hospital beds/capita ICU beds/capita, depth of coverage of health insurance, quality of health services, demographic share of age deciles, time dummies for key events [New Year, family holidays], a week/two weeks laged infection per capita as a control in a panel of daily/weekly mortality per capita (weakly correlated with the dependent variables), capital cities v largest cities.
+
+*Robustness checks*
+1. If we take the survival analysis, not trusting any testing data, we can view the first day of significant death - 3 weeks as the beginning of population exposure.  The treatments of the population may be captured by a vector of policies, including the Oxford data, and other daily sources of daily information, including from Facebook, Google and the like.
+2. Next, we can treat the infection/capita as informative, adding it to the controls.
+3. We can also take a daily panel regression analysis.
+4. At the end of the sample, we can try a cross-country study of factors accounting for the shape of the mortality/capital curve for countries that reached the beginning of the decline in mortality.
+
+### Case studies of selected countries
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warnings = FALSE)
+library(readr)
+library(wbstats)
+library(readxl)
+library(httr)
+library(tidyr)
+```
+
+## Data Sources
+
+*Novel Coronavirus COVID-19 (2019-nCoV)*
+(Data Repository by Johns Hopkins CSSE <https://github.com/CSSEGISandData/COVID-19/tree/master/csse_covid_19_data>)
+```{r, include=FALSE}
+jhurl = "https://raw.githubusercontent.com/CSSEGISandData/COVID-19/master/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv"
+covid19 <- read_csv(url(jhurl))
+```
+
+*Government Intervention* 
+(Oxford COVID-19 Government Response Tracker <https://www.bsg.ox.ac.uk/research/research-projects/oxford-covid-19-government-response-tracker>)
+```{r, include=FALSE}
+oxurl = "https://www.bsg.ox.ac.uk/sites/default/files/OxCGRT_Download_latest_data.xlsx"
+GET(oxurl, write_disk(tf <- tempfile(fileext = ".xlsx")))
+govresp <- read_excel(tf, 1L)
+rm(tf)
+```
+
+*Test Capacity*
+(Official sources collated by Our World in Data
+<https://ourworldindata.org/covid-testing>)
+```{r, include=FALSE}
+owurl = "https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/testing/covid-testing-all-observations.csv"
+testcap_v0 <- read_csv(url(owurl))
+testcap <- separate(testcap_v0, Entity, into=c("Country", "Unit type"), sep = " - ") 
+```
+
+*Population-weighted density*
+(Landscan Datasets <https://landscan.ornl.gov/landscan-datasets>)
+```{r, include=FALSE}
+```
+
+*Socioeconomic indicators*
+(World Development Indicators <https://databank.worldbank.org/source/world-development-indicators>)
+```{r, include=TRUE}
+urbanpp <- wb(country="countries_only",indicator="SP.URB.TOTL.IN.ZS",mrv=1)
+pop65yo <- wb(country="countries_only",indicator="SP.POP.65UP.TO.ZS",mrv=1)
+```
+
+## References
+
+George, Brandon, Seals, Samantha, and Aban, Inmaculada, 2014, Survival analysis and regression models, Journal of Nuclear Cardiology, 21, 4, 686-694.
+
+Ferguson, Neil, and Bhatt, Samir, 2020, Estimating the number of infections and the impact of nonpharmaceutical interventions on COVID-19 in 11 European countries, Imperial College London.
+
+Levy, Antoine, and Moscona, Jacob, 2020, Specializing in Density: Spatial Sorting and the Pattern of Trade, MIT.
+
+Mayer, Thierry, and Zignago, Soledad, 2011, Notes on CEPII's distances measures: the GeoDist database, CEPII.
+
+Ottensmann, John R., On Population-Weighted Density, Indiana University-Purdue University.
+
+Rodrik, Dani, 1999, Where Did All the Growth Go? External Shocks, Social Conflict, and Growth Collapses, Journal of Economic Growth, 4, 4, 385-412.
+
+https://www.bloomberg.com/graphics/2020-coronavirus-cases-world-map/
+
+https://www.economist.com/graphic-detail/2020/04/01/covid-19-may-be-far-more-prevalent-than-previously-thought
+
+https://www.imf.org/en/Topics/imf-and-covid19/Policy-Responses-to-COVID-19
+
+
