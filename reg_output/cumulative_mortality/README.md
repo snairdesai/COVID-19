@@ -1,1 +1,1 @@
-
+This folder includes regression outputs calculated using the 7-day rolling average of cumulative mortality rates as our dependent variable (attached in the Appendix). Tables are included for heterogeneity in our main covariates (GNI; propurban; popdensity; pop65; latitude; longitude; log(arrivals); log(departures); health expenditure; pollution - PM2.5 mg; vulnerable employment, etc.). Also included are the panel and cross-sectional baseline results, and the regression output for the Cox Proportional Hazards Model.  
