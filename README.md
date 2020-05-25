@@ -16,9 +16,7 @@ The "data" folder includes all of the initial and manipulated data used in the a
 
 In addition to the data folder, the repository also hosts the "csse_covid_19_time_series", "government_data", and "spatial_data" folders. The data from these folders is also uploaded to the central data folder, but have been included separately for ease of access. These represent our primary raw data files. The first file contains the COVID data pulled from John Hopkins CSSE. The second file contains the government data pulled from the Oxford Government Response Tracker. The last of these folders (spatial_data) was not included in this version of the working paper, but will be used in subsequent rounds of analysis.
 
-The "output_html" folder includes all of the interactive figures constructed through Plotly; which can be opened in a web browser for user interaction.
-
-The "output_png" folder includes all of our static figures.
+The "output_png" folder includes all of our static figures. All interative HTML figures can be generated using the Markdown file, and viewed in the Knit documents.
 
 The "reg_output" folder includes all of the tables from the regression analysis, which have been clearly labelled for ease of access. You will be able to find where the tables are generated in the markdown file by using the search function. The regression outputs have been divided into two sub-folders, for the weekly mortality growth rate (our dependent variable for our primary analysis) and the cumulative mortality growth (our dependent variable of choice for our secondary analysis, in the Online Appendix).
 
