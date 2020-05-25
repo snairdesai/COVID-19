@@ -1,1 +1,1 @@
-This folder contains the initial Markdown file first used for cleaning and preliminary analysis, as well as two documents (COVID19.rmd; COVID19.html) detailing our initial research plan.
+This folder contains the initial Markdown file first used for cleaning and preliminary analysis (COVID-19_Country_4-30-20.rmd), as well as two documents (COVID19.rmd; COVID19.html) detailing our initial research plan.
