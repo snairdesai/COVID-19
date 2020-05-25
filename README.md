@@ -2,7 +2,7 @@
 
 *Tracing the relationship between government interventions to the pandemic and the mortality curve.*
 
-This repo stores input, output, and code for the May 2020 NBER Working Paper "Accounting for Global COVID-19 Diffusion Patterns, January-April 2020" by Yothin Jinjarak (Victoria University of Wellington); Rashad Ahmed (University of Southern California); Sameer Nair-Desai (University of Southern California); Weining Xin (University of Southern California); and Joshua Aizenman (University of Southern California).
+This repo stores input, output, and code for the May 2020 NBER Working Paper ["Accounting for Global COVID-19 Diffusion Patterns, January-April 2020"](https://www.nber.org/papers/w27185) by [Yothin Jinjarak](https://www.wgtn.ac.nz/sef/about/staff/yothin-jinjarak) (Victoria University of Wellington); [Rashad Ahmed](https://www.nber.org/people/rashad_ahmed) (University of Southern California); [Sameer Nair-Desai](https://www.nber.org/people/sameer_nair-desai) (University of Southern California); [Weining Xin](https://www.weiningx.com/) (University of Southern California); and [Joshua Aizenman](https://dornsife.usc.edu/cf/econ/econ_faculty_display.cfm?Person_ID=1043595) (University of Southern California).
 
 The master branch hosts the R Markdown and Knitr documents, as well as folders with the initial data; temporary data; visualizations (interactive and static); and regression outputs.
 
