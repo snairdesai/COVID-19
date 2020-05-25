@@ -24,7 +24,7 @@ The data folder contains all the raw, temporary, and final data files used for a
 20. [social_protection.csv](https://data.worldbank.org/indicator/IQ.CPA.PROT.XQ?view=chart) is the World Bank CPIA's index for a nation's level of social protection provided for citizens.
 21. The [testcap.csv](https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/testing/covid-testing-all-observations.csv) file contains data on the test capacity and distribution across nations. Because of the large number of missing values in the data, this initial file is not used in our analysis.
 22. The [transparency.csv](https://data.worldbank.org/indicator/IQ.CPA.TRAN.XQ) file contains data from the World Bank CPIA's index on government transparency.
-23. [urbanpp](https://data.worldbank.org/indicator/SP.URB.TOTL.in.zs) measures the proportion of the population living in urban areas.
+23. [urbanpp.csv](https://data.worldbank.org/indicator/SP.URB.TOTL.in.zs) measures the proportion of the population living in urban areas.
 24. [vulnerable_employment.csv](https://data.worldbank.org/indicator/SL.EMP.VULN.ZS?view=chart) captures the proportion of the population's total employment working in occupations considered "vulnerable" to macroeconomic shocks (i.e. working in family-businesses/self-employed).
 
 **Temporary Data**
@@ -34,37 +34,56 @@ The data folder contains all the raw, temporary, and final data files used for a
 **Final Data**
 
 1. The Final_Data_Country.csv is the preliminary dataset (pdataframe) used for our analysis. It includes the following covariates, which are also described and labelled in the Markdown file (I only describe the most relevant variables below; please the WP or Markdown for a complete breakdown):
+
     A. Total_Cases_Country --> Cumulative COVID-19 cases recorded for each country, per day (*JHU CSSE*).
+    
     B. Total_Deceased_Country --> Cumulative COVID-19 deaths recorded for each country, per day (*JHU CSSE*).
+    
     C. New_Confirmed_Country --> New COVID-19 cases recorded for each country, per day (*JHU CSSE*).
+    
     D. New_Total_Deceased_Country --> New COVID-19 deaths recorded for each country, per day (*JHU CSSE*).
+    
     E. Population --> The population of the country.
+    
     F. Total_Mortality_Rate_Per_Capita --> Cumulative mortality rate per capita for each country per day, calculated as    
        Total_Deceased_Country/Population.
+       
     G. New_Mortality_Rate_Per_Capita --> New mortality rate per capita for each country per day, calculated as    
        New_Total_Deceased_Country/Population.
+       
     H. Total_Cases_Country_Per_Capita --> Cumulative case count per capita for each country per day, calculated as      
        Total_Cases_Country/Population.
+       
     I. rolling_average_confirmed --> Seven-day rolling average of New_Confirmed_Country (for observations within the first 
        week, the rolling average is updated per day -- i.e. the rolling average for Day 4 is calculated as the rolling average 
        of new cases for Days 1-3).
+       
     J. rolling_average_deceased --> Seven-day rolling average of New_Total_Deceased_Country (for observations within the first 
        week, the rolling average is updated per day -- i.e. the rolling average for Day 4 is calculated as the rolling average 
        of new cases for Days 1-3).
+       
     K. total_rolling_average_mortality --> Seven-day rolling average of Total_Mortality_Rate_Per_Capita (for observations
        within the first week, the rolling average is updated per day -- i.e. the rolling average for Day 4 is calculated as          the rolling average of new cases for Days 1-3).
+       
     L. new_rolling_average_mortality --> Seven-day rolling average of New_Mortality_Rate_Per_Capita (for observations
        within the first week, the rolling average is updated per day -- i.e. the rolling average for Day 4 is calculated as          the rolling average of new cases for Days 1-3).
+       
     M. The country coordinates of each nation (latitude and longitude).
+    
     N. Oxford's Government Response Tracker covariates (from C1_School.closing to the LegacyStringencyIndex). Note Oxford has 
        their own measure for confirmed cases and deaths, which we include in the dataframe (Oxford_Cases and Oxford_Deaths)   
        but do not use for analysis over the Hopkins data.
+       
     O. Lagged variables (one week; two week; and three week) created for the government covariates of interest. These columns 
        have simply been created for illustrative purposes; so users can scroll to observe the specific lags implemented. We          use the "Lag" function directly in the regression model to generate these lags, without directly calling these columns.
+       
     P. Numerous demographic controls pulled from the World Bank Development Indicators and described above (i.e. prop65; 
        propurban; popdensity; etc.).
+       
     Q. Mobility data pulled from Apple (driving; walking; transit).
+    
     R. Democracy and institutional data pulled from various sources (i.e. EUI_democracy; freedom_house; cinc; etc.)
+    
     S. Prior deaths from high blood pressure, respiratory, and endocrine diseases over the period from 2015-2018, pulled from 
        the World Health Organization's International Classification of Diseases (endocrine_deaths; blood_pressure_deaths;     
        respiratory_deaths).
