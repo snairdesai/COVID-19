@@ -114,12 +114,13 @@ The data folder contains all the raw, temporary, and final data files used for a
     
 4. The surv.dat.csv is the second of the two datasets used to generate results for the cross-sectional analysis of cumulative mortality rates, included in our appendix. It is generated from cs_cumulative.csv, but incorporates new variables (which are calculated in the dataframe "bb" in the Markdown file):
 
-    
     A. RollingAverage_Walking --> Seven-day rolling average of walking index, from mobility data.
     
     B. RollingAverage_StringencyIndex --> Seven-day rolling average of stringency index.
     
     C. peak.new.mortality --> Maximum value of RollingAverage_New_Mortality_Rate.
+    
+    C. peak.mortality --> Maximum value of RollingAverage_Total_Mortality_Rate.
     
     D. peak.new.case --> Maximum value of RollingAverage_New_Case_Rate.
 
@@ -127,28 +128,47 @@ The data folder contains all the raw, temporary, and final data files used for a
     
     F. first.date.mortality --> Date of first death.    
         
-    A. days.to.peak.mortality --> 
+    G. days.to.peak.mortality --> Number of days from first death to peak of mortality curve (peak.date.mortality - 
+       first.date.mortality)
     
-    B. peak.or.no.mortality
+    H. peak.or.no.mortality --> Indicator variable for whether or not the date is at the peak of the mortality curve.
     
-    C. days.to.peak.case
+    I. days.to.peak.case --> Number of days from first case to peak of case curve (peak.date.case - 
+       first.date.case)
+       
+    J. peak.or.no.case --> Indicator variable for whether or not the date is at the peak of the mortality curve.
     
-    D. early.mortality
+    K. early.mortality --> Total death rate in the first week since the first death (RollingAverage_Total_Mortality_Rate).
     
-    E. early.mortality.growth
+    L. early.mortality.growth --> Growth rate of the log of early.mortality in the current week - the log of early.mortality 
+       in the prior week.
     
-    F. early.case
+    M. early.case --> Total case rate in the first week since the first death (RollingAverage_Total_Case_Rate).
     
-    G. early.case.growth
+    N. early.case.growth --> Growth rate of the log of early.case in the current week - the log of early.case 
+       in the prior week.
+       
+    O. early.mobility.walking --> Weekly average rolling of walking (from mobility data - RollingAverage_Walking) in the week 
+       prior to the first death.
+       
+    P. early.stringency --> Weekly average rolling of stringency index (RollingAverage_StringencyIndex) in the week 
+       prior to the first death.
+       
+    Q. peak.stringency --> Maximum value of the RollingAverage_StringencyIndex.
     
-    H. peak.mortality
+    K. peak.date.stringency --> Date of the maximum value of RollingAverage_StringencyIndex.
     
-    I. peak.case
+    L. stringency.growth.to.max --> (Peak Stringency - Early Stringency)/(Peak Date Stringency - First Date Mortality).
     
-    L. log.peak.mortality.to.duration
+    M. log.peak.mortality.to.duration --> log(peak new mortality)/(days to peak mortality).
     
-    M. log.peak.case.to.duration
+    N. log.peak.case.to.duration --> log(peak case)/(days to peak case).
+    
+5. datweekly_panel.csv is the dataset used to generate results for the longitudinal panel analysis of weekly mortality rates (the main results). It is generated from Final_Data_Country.csv, but incorporates new variables. These are the same variables as p.dat_cum.csv.
 
+6. datweekly_cs.csv is the first of the two datasets used to generate results for the cross-sectional analysis of weekly mortality rates (main results). It is generated from Final_Data_Country.csv, but incorporates new variables (the same as cs_cumulative.csv).
+
+7. surv.dat_weekly.csv is the second of the two datasets used to generate results for the cross-sectional analysis of weekly mortality rates (main results). It is generated from datweekly_cs.csv, but incorporates new variables (these are the same variables as surv.dat.csv):
 
       
 **In addition to the above files, we also create a series of other temporary data files solely for the purpose of analysis. These datasets include newly constructed variables, summarized below and in the Appendix of the Working Paper. To view the complete calculations for these variables, please reference the Working Paper or Markdown File.
