@@ -87,6 +87,58 @@ The data folder contains all the raw, temporary, and final data files used for a
     S. Prior deaths from high blood pressure, respiratory, and endocrine diseases over the period from 2015-2018, pulled from 
        the World Health Organization's International Classification of Diseases (endocrine_deaths; blood_pressure_deaths;     
        respiratory_deaths).
+       
+2. The p.dat_cum.csv is the dataset used to generate results for the longitudinal panel analysis of cumulative mortality rates, included in our appendix. It is generated from Final_Data_Country.csv, but incorporates new variables:
+
+    A. New_Case_Rate --> Number of daily new cases divided by country population.
+    
+    B. RollingAverage_New_Case_Rate --> Seven-day rolling average of New_Case_Rate.
+    
+    C. Total_Mortality_Rate_Growth --> The log of total mortality in the current week minus the log of total mortality in the           
+       previous week.
+       
+    D. Total_Case_Rate_Growth --> The log of total cases in the current week minus the log of total cases in the           
+       previous week.
+       
+    E. New_Case_Rate_Growth --> The log of new cases in the current week minus the log of new cases in the           
+       previous week.
+       
+    F. New_Mortality_Rate_Growth --> The log of the rolling average of new mortality in the current week minus the log of 
+       rolling average of new mortality in the previous week.
+       
+    G. respiratory_deaths_rate --> The number of respiratory deaths divded by the population, multipled by a third (because 
+       the respiratory deaths data was aggregated over three years).
+       
+3. The cs_cumulative.csv is the first of the two datasets used to generate results for the cross-sectional analysis of cumulative mortality rates, included in our appendix. It is generated from Final_Data_Country.csv, but incorporates new variables. For brevity, I only list the new variable not calculated in the above panel dataframe (p.dat_cum.csv).
+    A. RollingAverage_Total_Death_Country --> Seven-day rolling average of Total_Death_Country.
+    
+4. The surv.dat.csv is the second of the two datasets used to generate results for the cross-sectional analysis of cumulative mortality rates, included in our appendix. It is generated from cs_cumulative.csv, but incorporates new variables (which are calculated in the dataframe "bb" in the Markdown file):
+    A. days.to.peak.mortality
+    
+    B. peak.or.no.mortality
+    
+    C. days.to.peak.case
+    
+    D. early.mortality
+    
+    E. early.mortality.growth
+    
+    F. early.case
+    
+    G. early.case.growth
+    
+    H. peak.mortality
+    
+    I. peak.case
+    
+    J. peak.new.mortality
+    
+    K. peak.new.case
+    
+    L. log.peak.mortality.to.duration
+    
+    M. log.peak.case.to.duration
+
       
 **In addition to the above files, we also create a series of other temporary data files solely for the purpose of analysis. These datasets include newly constructed variables, summarized below and in the Appendix of the Working Paper. To view the complete calculations for these variables, please reference the Working Paper or Markdown File.
 
