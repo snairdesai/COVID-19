@@ -113,7 +113,21 @@ The data folder contains all the raw, temporary, and final data files used for a
     A. RollingAverage_Total_Death_Country --> Seven-day rolling average of Total_Death_Country.
     
 4. The surv.dat.csv is the second of the two datasets used to generate results for the cross-sectional analysis of cumulative mortality rates, included in our appendix. It is generated from cs_cumulative.csv, but incorporates new variables (which are calculated in the dataframe "bb" in the Markdown file):
-    A. days.to.peak.mortality
+
+    
+    A. RollingAverage_Walking --> Seven-day rolling average of walking index, from mobility data.
+    
+    B. RollingAverage_StringencyIndex --> Seven-day rolling average of stringency index.
+    
+    C. peak.new.mortality --> Maximum value of RollingAverage_New_Mortality_Rate.
+    
+    D. peak.new.case --> Maximum value of RollingAverage_New_Case_Rate.
+
+    E. peak.date.mortality --> Date of the maximum value of RollingAverage_New_Mortality_Rate (peak.new.mortality).
+    
+    F. first.date.mortality --> Date of first death.    
+        
+    A. days.to.peak.mortality --> 
     
     B. peak.or.no.mortality
     
@@ -131,13 +145,10 @@ The data folder contains all the raw, temporary, and final data files used for a
     
     I. peak.case
     
-    J. peak.new.mortality
-    
-    K. peak.new.case
-    
     L. log.peak.mortality.to.duration
     
     M. log.peak.case.to.duration
+
 
       
 **In addition to the above files, we also create a series of other temporary data files solely for the purpose of analysis. These datasets include newly constructed variables, summarized below and in the Appendix of the Working Paper. To view the complete calculations for these variables, please reference the Working Paper or Markdown File.
@@ -150,7 +161,8 @@ The data folder contains all the raw, temporary, and final data files used for a
     F. Logged Peak Mortality-to-PD --> Ratio of the logged peak new mortality rate to the PD to peak mortality.
     G. Early Confirmed Case --> Cumulative confirmed case rate in the week following the first case
     H. Early Confirmed Case Growth --> Growth rate of new confirmed case rate in the week following the first case.
-    I. Peak Cum. Confirmed Case --> Cumulative confirmed case rate at the peak of new confirmed case rate in the first quasi-        bell curve.
+    I. Peak Cum. Confirmed Case --> Cumulative confirmed case rate at the peak of new confirmed case rate in the first quasi-           
+       bell curve.
     J. Peak New Confirmed Case --> New confirmed case rate at the peak of new confirmed case rate in the first quasi-bell 
        curve.
     K. PD to Peak Confirmed Case --> Day-to-peak of new confirmed case rate in the first quasi-bell curve.
