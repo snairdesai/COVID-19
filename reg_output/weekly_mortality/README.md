@@ -1,1 +1,9 @@
 This folder includes regression outputs calculated using the 7-day rolling average of *weekly* mortality rates as our dependent variable (which constitute the main results of our Working Paper). Tables are included for heterogeneity in our main covariates (GNI; propurban; popdensity; pop65; latitude; longitude; log(arrivals); log(departures); health expenditure; pollution - PM2.5 mg; vulnerable employment, etc.). Also included are the panel and cross-sectional baseline results, and the regression output for the Cox Proportional Hazards Model.  
+
+All statistical tests in the analysis are standard tests reported in the regression tables, including t-tests of the significance of regression parameters, F-tests of overall significance of regression models, and other tests (such as the proportional hazards assumptions - Grambsch and Therneau (1994)). 
+
+For t-tests of the significance of regression parameters, we report the basic estimates (or effect sizes), standard errors, superscripts indicating the significance level, and degrees of freedom, which are sufficient to calculate the confidence intervals and P values. 
+
+For F-tests of overall significance of regression models, we report the F statistics, and superscripts indicating the significance level, and degrees of freedom, which are sufficient to calculate the confidence intervals and P values. For tests of proportional hazards assumptions (Grambsch and Therneau (1994)), we report the P value, degrees of freedom, and discuss the significance level in the text of the manuscript.
+
+Note that we use both one-sided and two-sided statistical tests for significance (depending on the test). As noted above, our regression tables report effect sizes, p-values, and standard errors. T-statistics and confidence intervals can be calculated from these outputs if desired.
