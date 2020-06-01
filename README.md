@@ -8,7 +8,7 @@ The master branch hosts the R Markdown and Knitr documents, as well as folders w
 
 # DESCRIPTION OF THE FILES
 
-The relevant R Markdown file is "COVID-19_Country_6-01-20.rmd" which is fully reproducible in RStudio or RCloud. Accompanying the markdown are knitted files of the output ("COVID-19_Country_6-01-20.knit.md"; "COVID-19_Country_6-01-20.html"; COVID-19_Country_6-01-20.utf8.md").
+The relevant R Markdown file is "COVID-19_Country_6-01-20.rmd" which is fully reproducible in RStudio or RCloud. Accompanying the markdown is a knit file of the output ("Accounting for Global COVID-19 Diffusion Patterns, January-April 2020.pdf").
 
 # DESCRIPTION OF THE FOLDERS
 
