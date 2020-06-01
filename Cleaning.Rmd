@@ -1,0 +1,1561 @@
+---
+title: "COVID-19 Cleaning"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+authors: "Sameer Nair-Desai, Rashad Ahmed, Weining Xin"
+date: "6/01/2020"
+output: 
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+*If you do not wish to run the code, please see the final output (graphs and datasets) provided in the Github repository. Make sure to check the relevant README files for the contents of the folder.*
+
+Installing the relevant packages.
+install.packages("sf")
+install.packages("readr")
+install.packages("tmap") 
+install.packages("leaflet") 
+install.packages("mapview") 
+install.packages("ggplot2")
+install.packages("tidyverse")
+install.packages("rlang")
+install.packages("reshape")
+install.packages("rgdal")
+install.packages("lubridate")
+install.packages("plotly")
+install.packages("patchwork")
+install.packages("ggforce")
+install.packages("gridExtra")
+install.packages("htmltools")
+install.packages("data.table")
+install.packages("webshot")
+webshot::install_phantomjs()
+install.packages("runner")
+install.packages("zoo")
+install.packages("devtools")
+devtools::install_version("latticeExtra", version="0.6-28")
+install.packages("Hmisc")
+install.packages("DataCombine")
+install.packages("fastDummies")
+install.packages("heatmaply")
+install.packages("glmnet")
+install.packages("caret")
+install.packages("summarytools")
+install.packages("remote")
+remotes::install_github('rapporter/pander')
+install.packages("mlbench")
+install.packages("psych")
+install.packages("lmtest")
+install.packages("quantmod")
+install.packages("corrplot")
+install.packages("fBasics")
+install.packages("stargazer")
+install.packages("tseries")
+install.packages("vars")
+install.packages("gghighlight")
+
+```{r libraries}
+# Setting our initial libraries. In subsequent rounds of analysis, we will be integrating new libraries (we do not do so here to avoid conflicts between packages).
+library(sf)
+library(readr)
+library(mapview)
+library(ggplot2)
+library(tidyverse)
+library(rlang)
+library(reshape)
+library(rgdal)
+library(lubridate)
+library(plotly)
+library(patchwork)
+library(ggforce)
+library(gridExtra)
+library(htmltools)
+library(data.table)
+library(webshot)
+library(coronavirus)
+library(runner)
+library(zoo)
+library(DataCombine)
+library(fastDummies)
+library(car)
+library(heatmaply)
+library(htmlwidgets)
+library(summarytools)
+library(glmnet)
+library(caret)
+library(mlbench)
+library(psych)
+library(plm)
+library(lmtest)
+library(quantmod)
+library(leaflet)
+library(corrplot)
+library(fBasics)
+library(stargazer)
+library(tseries)
+library(vars)
+library(dplyr)
+library(gghighlight)
+# I don't want scientific notation for my values, so I specify this below.
+options(scipen = 999)
+```
+
+
+## CLEANING - Note that initial confirmed cases and deaths are recorded as cumulative sums in the Hopkins dataset. We will generate new (daily and weekly) case and death data.
+```{r cleaning}
+# Import and quickly cleaning our data. We will call the import our initial confirmed data (Wide). 
+Initial_Confirmed_Wide <- read_csv("COVID-19_Final/data/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_confirmed_global.csv")
+```
+
+# Creating our Temporary and World data files.
+```{r creation}
+# Our data is in wide format. Here, I translate it to long format.
+Confirmed_Long <- pivot_longer(Initial_Confirmed_Wide, cols = c(5:102), names_to = "Dates", values_to = "Confirmed_Cases")
+
+# Now, I rename my column for country in the long dataset.
+Confirmed_Long$COUNTRY <- Confirmed_Long$`Country/Region`
+
+# I can also convert the dates into a more usable string format with lubridate.
+Confirmed_Long$Date <- mdy(Confirmed_Long$Dates, quiet = FALSE, tz = NULL, locale = Sys.getlocale("LC_TIME"),
+  truncated = 0)
+order(Confirmed_Long$Date)
+
+# Now, I repeat these steps for the deceased data. 
+Initial_Deceased_Wide <- read_csv("COVID-19_Final/data/csse_covid_19_data/csse_covid_19_time_series/time_series_covid19_deaths_global.csv")
+
+# We continue with the reshape.
+Deceased_Long <- pivot_longer(Initial_Deceased_Wide, cols = c(5:102), names_to = "Dates", values_to = "Deceased")
+require(reshape)
+Deceased_Long$COUNTRY <- Deceased_Long$`Country/Region`
+Deceased_Long$Date <- mdy(Deceased_Long$Dates, quiet = FALSE, tz = NULL, locale = Sys.getlocale("LC_TIME"),
+  truncated = 0)
+order(Deceased_Long$Date)
+
+# I then merge the cleaned deceased and confirmed datasets.
+Merged_Data <- cbind(Confirmed_Long, Deceased_Long)
+colnames(Merged_Data)
+
+# I only keep the variables we are interested in.
+myvars <- c("COUNTRY", "Province/State", "Lat", "Long", "Dates", "Confirmed_Cases", "Date", "Deceased")
+
+# I rename this file as our temporary data.
+Temporary_Data_Country <- Merged_Data[myvars]
+
+# We might also want a dataset with the total number of global confirmed cases and deaths per day.
+World_Data <- Temporary_Data_Country %>% group_by(Date) %>%
+summarise(country='World', Global_Confirmed_Cases = sum(Confirmed_Cases, na.rm=T),
+Global_Deceased = sum(Deceased, na.rm=T))
+World_Data$Death_Rate <- ((World_Data$Global_Deceased/World_Data$Global_Confirmed_Cases) * 100)
+```
+
+# Collapsing and calculating relevant variables in the temporary data.
+```{r calculations}
+# Here, I subset the data so as to properly collapse by country.
+myvarstemporary <- c("COUNTRY", "Date", "Confirmed_Cases", "Deceased")
+
+Temporary_Data_Country <- Temporary_Data_Country[myvarstemporary]
+
+Temporary_Data_Country <- Temporary_Data_Country %>%
+  group_by(COUNTRY, Date) %>%
+  summarise(Total_Cases_Country = sum(Confirmed_Cases), Total_Deceased_Country = sum(Deceased))
+
+# I next want to calculate the increase in deaths and confirmed cases per day.
+
+Temporary_Data_Country %>%
+  arrange(COUNTRY, Date)
+
+number <- nrow(Temporary_Data_Country)
+First_Day <- min(Temporary_Data_Country$Date)
+
+Temporary_Data_Country$New_Confirmed_Country <- ifelse(Temporary_Data_Country$Date == First_Day, NA, Temporary_Data_Country$Total_Cases_Country - dplyr::lag(Temporary_Data_Country$Total_Cases_Country, number=1))
+
+Temporary_Data_Country$New_Total_Deceased_Country <- ifelse(Temporary_Data_Country$Date == First_Day, NA, Temporary_Data_Country$Total_Deceased_Country - dplyr::lag(Temporary_Data_Country$Total_Deceased_Country, number=1))
+
+# There are a few values for which we have negative new deaths and new cases. Intuitively, this shouldn't make sense. This is actually a problem which steps from the COVID data. For example, Iceland has some weird values in the initial dataframe. Although deaths should represent cumulative sums, if we observe the data from 3/15 - 4/05, we note that the number of recorded deaths drops from 5 to 0, then increases back to six as the month progresses. This is a well-documented problem which stems from the original Github data: https://github.com/CSSEGISandData/COVID-19/issues/2379; https://github.com/CSSEGISandData/COVID-19/issues/2165. We can either exclude data points which show a decrease in cumulative deaths (which I haven't done here); or wait for the data to be updated. Because we only drop a few observations from the analysis, I choose to exclude them, and proceed as normal. Note that when we take global sums, this will affect our cumulative totals (as we have excluded observations for certain nations on certain days).
+
+Temporary_Data_Country <- Temporary_Data_Country[which(Temporary_Data_Country$New_Confirmed_Country >= 0),]
+Temporary_Data_Country <- Temporary_Data_Country[which(Temporary_Data_Country$New_Total_Deceased_Country >= 0),]
+```
+
+```{r calculations 2}
+# Now, I calculate the total mortality rate per capita, new mortality rate per capita, death rate per capita, and confirmed cases per capita (using data from the United Nations on global demographics for the merge). 
+
+UN_Population <- read_csv("COVID-19_Final/data/UN_Population_Data.csv")
+
+UN_Population$COUNTRY <- UN_Population$Location
+
+UN_Population[25, "COUNTRY"] <- "Bolivia"
+UN_Population[30, "COUNTRY"] <- "Brunei"
+UN_Population[43, "COUNTRY"] <- "Taiwan*"
+UN_Population[46, "COUNTRY"] <- "Congo (Brazzaville)"
+UN_Population[54, "COUNTRY"] <-"Cote d'Ivoire"
+UN_Population[56, "COUNTRY"] <- "Congo (Kinshasa)"
+UN_Population[98, "COUNTRY"] <- "Iran"
+UN_Population[112, "COUNTRY"] <- "Laos"
+UN_Population[138, "COUNTRY"] <- "Burma"
+UN_Population[162, "COUNTRY"] <- "Korea, South"
+UN_Population[163, "COUNTRY"] <- "Moldova"
+UN_Population[165, "COUNTRY"] <- "Russia"
+UN_Population[196, "COUNTRY"] <- "Syria"
+UN_Population[212, "COUNTRY"] <- "Tanzania"
+UN_Population[213, "COUNTRY"] <- "US"
+UN_Population[217, "COUNTRY"] <- "Venezuela"
+UN_Population[218, "COUNTRY"] <- "Vietnam"
+
+# I subset the file to only include the nations in our final data.
+UN_Population <- subset(UN_Population, is.element(UN_Population$COUNTRY, Temporary_Data_Country$COUNTRY))
+
+# Lastly, I join the two dataframes. Note, we lose some observations using inner join (Western Sahara, West Bank and Gaza, MS Zaandam, Kosovo, Diamond Princess, and the Central African Republic.). However, we are not interested in these nations for the purposes of our sample.
+Temporary_Data_Country <- inner_join(Temporary_Data_Country, UN_Population)
+
+# This allows me to calculate our variable of interest: the mortality rate per capita (for both total deaths, and new deaths).
+Temporary_Data_Country$Total_Mortality_Rate_Per_Capita = (Temporary_Data_Country$Total_Deceased_Country / Temporary_Data_Country$Population)
+
+Temporary_Data_Country$New_Mortality_Rate_Per_Capita = (Temporary_Data_Country$New_Total_Deceased_Country / Temporary_Data_Country$Population)
+
+# We might also be interested in cases per capita.
+Temporary_Data_Country$Total_Cases_Country_Per_Capita = (Temporary_Data_Country$Total_Cases_Country / Temporary_Data_Country$Population)
+
+```
+
+```{r calculations 3}
+# Lastly, I want to create a rolling average of the total and new mortality rates per capita, new confirmed cases, and new deaths. This is a bit complicated, so bear with me.
+
+# First, I order the data by country and date.
+Temporary_Data_Country <- Temporary_Data_Country[order(Temporary_Data_Country$COUNTRY, Temporary_Data_Country$Date),]
+
+# I then construct a seven-day rolling average of confirmed cases, deaths, and both types of mortality rates by country.
+Temporary_Data_Country <- Temporary_Data_Country %>%
+  group_by(COUNTRY) %>%
+  mutate(rolling_average_confirmed = frollmean(New_Confirmed_Country, 7))
+Temporary_Data_Country <- Temporary_Data_Country %>%
+  group_by(COUNTRY) %>%
+  mutate(rolling_average_deceased= frollmean(New_Total_Deceased_Country, 7))
+Temporary_Data_Country <- Temporary_Data_Country %>%
+  group_by(COUNTRY) %>%
+  mutate(total_rolling_average_mortality = frollmean(Total_Mortality_Rate_Per_Capita, 7))
+Temporary_Data_Country <- Temporary_Data_Country %>%
+  group_by(COUNTRY) %>%
+  mutate(new_rolling_average_mortality = frollmean(New_Mortality_Rate_Per_Capita, 7))
+
+# The seven-day rolling average works well, but the algorithm only gives an output after the first week (as we need seven prior values for the sake of our calculation). Ideally, we would want these missing values to have their own rolling averages (i.e. a rolling average of two days for the second date in our dataset; or a rolling average of five days for the fifth date). To do this, I first create a new dataframe with our missing values from the initial seven-day rolling average.
+Missing_Mean_Confirmed <- Temporary_Data_Country[which(is.na(Temporary_Data_Country$rolling_average_confirmed)), ]
+Missing_Mean_Total_Deceased_Country <- Temporary_Data_Country[which(is.na(Temporary_Data_Country$rolling_average_deceased)), ]
+Missing_Mean_Total_Mortality <- Temporary_Data_Country[which(is.na(Temporary_Data_Country$total_rolling_average_mortality)), ]
+Missing_Mean_New_Mortality <- Temporary_Data_Country[which(is.na(Temporary_Data_Country$new_rolling_average_mortality)), ]
+
+# Next, I calculate a "new" rolling average for each of our nations, using the roll apply function. The syntax is complicated; but essentially this command allows the user the freedom to vary rolling averages by different "windows" of dates (i.e. three-day average vs. six-day average).
+Missing_Mean_Confirmed <- Missing_Mean_Confirmed %>% 
+  group_by(COUNTRY) %>%
+  mutate(rolling_average_confirmed2 = rollapply(New_Confirmed_Country, 6, mean, na.rm = TRUE, fill = NA, align = 'right', partial=TRUE))
+Missing_Mean_Total_Deceased_Country <- Missing_Mean_Total_Deceased_Country %>% 
+  group_by(COUNTRY) %>%
+  mutate(rolling_average_deceased2 = rollapply(New_Total_Deceased_Country, 6, mean, na.rm = TRUE, fill = NA, align = 'right', partial=TRUE))
+Missing_Mean_Total_Mortality <- Missing_Mean_Total_Mortality %>% 
+  group_by(COUNTRY) %>%
+  mutate(total_rolling_average_mortality2 = rollapply(Total_Mortality_Rate_Per_Capita, 6, mean, na.rm = TRUE, fill = NA, align = 'right', partial=TRUE))
+Missing_Mean_New_Mortality <- Missing_Mean_New_Mortality %>% 
+  group_by(COUNTRY) %>%
+  mutate(new_rolling_average_mortality2 = rollapply(New_Mortality_Rate_Per_Capita, 6, mean, na.rm = TRUE, fill = NA, align = 'right', partial=TRUE))
+
+# We now want to merge this data back to our temporary file.
+Temporary_Data_Country <- merge(Temporary_Data_Country, Missing_Mean_Confirmed, by = c("COUNTRY", "Date"), all=TRUE)
+Temporary_Data_Country <- merge(Temporary_Data_Country, Missing_Mean_Total_Deceased_Country, by = c("COUNTRY", "Date"), all=TRUE)
+Temporary_Data_Country <- merge(Temporary_Data_Country, Missing_Mean_Total_Mortality, by = c("COUNTRY", "Date"), all=TRUE)
+Temporary_Data_Country <- merge(Temporary_Data_Country, Missing_Mean_New_Mortality, by = c("COUNTRY", "Date"), all=TRUE)
+```
+
+```{r calculations 4}
+# Lastly, we can replace the missing values in our temporary file (for the confirmed rolling averages prior to one week) with the newly calculated "partial" rolling averages. We then replace all missing values with zero (the only missing values which remain are for our first day, when naturally no new cases will be recorded, or, in the case of our rolling average for the mortality rate, for dates in which we don't yet have a recorded case).
+Temporary_Data_Country$rolling_average_confirmed.x[is.na(Temporary_Data_Country$rolling_average_confirmed.x)] <- Temporary_Data_Country$rolling_average_confirmed2[is.na(Temporary_Data_Country$rolling_average_confirmed.x)]
+Temporary_Data_Country$rolling_average_confirmed.x[is.na(Temporary_Data_Country$rolling_average_confirmed.x)] <- 0
+Temporary_Data_Country$rolling_average_confirmed <- Temporary_Data_Country$rolling_average_confirmed.x
+Temporary_Data_Country$rolling_average_deceased.x[is.na(Temporary_Data_Country$rolling_average_deceased.x)] <- Temporary_Data_Country$rolling_average_deceased2[is.na(Temporary_Data_Country$rolling_average_deceased.x)]
+Temporary_Data_Country$rolling_average_deceased.x[is.na(Temporary_Data_Country$rolling_average_deceased.x)] <- 0
+Temporary_Data_Country$rolling_average_deceased <- Temporary_Data_Country$rolling_average_deceased.x
+Temporary_Data_Country$total_rolling_average_mortality.x[is.na(Temporary_Data_Country$total_rolling_average_mortality.x)] <- Temporary_Data_Country$total_rolling_average_mortality2[is.na(Temporary_Data_Country$total_rolling_average_mortality.x)]
+Temporary_Data_Country$total_rolling_average_mortality.x[is.na(Temporary_Data_Country$total_rolling_average_mortality.x)] <- 0
+Temporary_Data_Country$total_rolling_average_mortality <- Temporary_Data_Country$total_rolling_average_mortality.x
+Temporary_Data_Country$new_rolling_average_mortality.x[is.na(Temporary_Data_Country$new_rolling_average_mortality.x)] <- Temporary_Data_Country$new_rolling_average_mortality2[is.na(Temporary_Data_Country$new_rolling_average_mortality.x)]
+Temporary_Data_Country$new_rolling_average_mortality.x[is.na(Temporary_Data_Country$new_rolling_average_mortality.x)] <- 0
+Temporary_Data_Country$new_rolling_average_mortality <- Temporary_Data_Country$new_rolling_average_mortality.x
+
+# I only keep columns we care about (which are not repetitive).
+Temporary_Data_Country$Total_Cases_Country <- Temporary_Data_Country$Total_Cases_Country.x
+Temporary_Data_Country$Total_Deceased_Country <- Temporary_Data_Country$Total_Deceased_Country.x
+Temporary_Data_Country$New_Confirmed_Country <- Temporary_Data_Country$New_Confirmed_Country.x
+Temporary_Data_Country$New_Total_Deceased_Country <- Temporary_Data_Country$New_Total_Deceased_Country.x
+Temporary_Data_Country$Death_Rate <- Temporary_Data_Country$Death_Rate.x
+Temporary_Data_Country$Total_Mortality_Rate_Per_Capita <- Temporary_Data_Country$Total_Mortality_Rate_Per_Capita.x
+Temporary_Data_Country$New_Mortality_Rate_Per_Capita <- Temporary_Data_Country$New_Mortality_Rate_Per_Capita.x
+Temporary_Data_Country$Location <- Temporary_Data_Country$Location.x
+Temporary_Data_Country$Population <- Temporary_Data_Country$Population.x
+Temporary_Data_Country$Total_Cases_Country_Per_Capita <- Temporary_Data_Country$Total_Cases_Country_Per_Capita.x
+Temporary_Data_Country$rolling_average_confirmed <- Temporary_Data_Country$rolling_average_confirmed.x
+Temporary_Data_Country$rolling_average_deceased <- Temporary_Data_Country$rolling_average_deceased.x
+Temporary_Data_Country$total_rolling_average_mortality <- Temporary_Data_Country$total_rolling_average_mortality.x
+Temporary_Data_Country$new_rolling_average_mortality <- Temporary_Data_Country$new_rolling_average_mortality.x
+
+colnames(Temporary_Data_Country)
+myvarstemp <- c("COUNTRY", "Date", "Total_Cases_Country", "Total_Deceased_Country", "New_Confirmed_Country", "New_Total_Deceased_Country", "Population", "Total_Mortality_Rate_Per_Capita", "New_Mortality_Rate_Per_Capita", "Total_Cases_Country_Per_Capita", "rolling_average_confirmed", "rolling_average_deceased", "total_rolling_average_mortality", "new_rolling_average_mortality")
+Temporary_Data_Country <- Temporary_Data_Country[myvarstemp]
+
+colnames(Temporary_Data_Country)
+```
+
+# Here, I add coordinates for each nation in the dataset.
+```{r coordinates}
+# When we collapse the COVID data to the country level, we lose our coordinate data. I now merge a dataset on global coordinates by country from: https://developers.google.com/public-data/docs/canonical/countries_csv. Note that I edited country names to match the data in the CSV itself. 
+
+Country_Coordinates <- read.csv("COVID-19_Final/data/Country_Coordinates.csv")
+
+Country_Coordinates$COUNTRY <- Country_Coordinates$Country
+
+Country_Coordinates$latitude <- Country_Coordinates$Latitude 
+Country_Coordinates$longitude <- Country_Coordinates$Longitude 
+
+colnames(Country_Coordinates)
+myvarscoords <- c("COUNTRY", "latitude", "longitude")
+Country_Coordinates <- Country_Coordinates[myvarscoords]
+
+# Lastly, I merge the two dataframes.
+Temporary_Data_Country <- merge(Temporary_Data_Country, Country_Coordinates, by = c("COUNTRY"), all=TRUE)
+
+```
+
+# Labelling and saving our temporary data.
+```{r labelling}
+# I load the following two libraries in order to label our variables.
+library(lattice)
+library(Hmisc)
+
+label(Temporary_Data_Country$Total_Cases_Country) <- "Cumulative Sum of Confirmed Cases by Country (John Hopkins)"
+label(Temporary_Data_Country$Total_Deceased_Country) <- "Cumulative Sum of Deaths by Country (John Hopkins)"
+label(Temporary_Data_Country$New_Confirmed_Country) <- "Daily Increase in Confirmed Cases (John Hopkins)"
+label(Temporary_Data_Country$New_Total_Deceased_Country) <- "Daily Increase in Deaths (John Hopkins)"
+label(Temporary_Data_Country$Total_Mortality_Rate_Per_Capita) <- "Total Deaths by Population (Total_Deceased_Country/Population)"
+label(Temporary_Data_Country$New_Mortality_Rate_Per_Capita) <- "New Deaths by Population (New_Total_Deceased_Country/Population)"
+label(Temporary_Data_Country$Total_Cases_Country_Per_Capita) <- "Total Cases by Population (Total_Cases_Country/Population)"
+label(Temporary_Data_Country$rolling_average_confirmed) <- "Seven Day Rolling Average of New Confirmed Cases by Country (with the exception of Days 1-7)"
+label(Temporary_Data_Country$rolling_average_deceased) <- "Seven Day Rolling Average of New Deaths by Country (with the exception of Days 1-7)"
+label(Temporary_Data_Country$total_rolling_average_mortality) <- "Seven Day Rolling Average of Total Case Mortality Rate by Country (with the exception of Days 1-7)"
+label(Temporary_Data_Country$new_rolling_average_mortality) <- "Seven Day Rolling Average of New Case Mortality Rate by Country (with the exception of Days 1-7)"
+
+# This represents the "Temporary_Data_Country.csv" file saved in the data folder. I recommend you load in the CSV directly to ensure there are no discrepancies between the edits made in the Cloud, as opposed to my own R Project. I do this below.
+
+# Removing the Cloud version of the Temporary Data.
+remove(Temporary_Data_Country)
+
+# Importing the Temporary Data from the data folder. 
+Temporary_Data_Country <- read_csv("COVID-19_Final/data/Temporary_Data_Country.csv")
+```
+
+# Merging our government data and temporary data to create a final dataframe.
+```{r final data}
+# Now, I want to merge our temporary data with the Oxford dataset on global policy responses. Please see a description of the variables here: https://www.bsg.ox.ac.uk/sites/default/files/2020-04/BSG-WP-2020-032-v5.0_0.pdf. 
+# The source is: Hale, Thomas, Anna Petherick, Toby Phillips, Samuel Webster. “Variation in Government Responses to COVID-19” Version 5.0. Blavatnik School of Government Working Paper. April 28, 2020. Available: www.bsg.ox.ac.uk/covidtracker.
+# See https://www.bsg.ox.ac.uk/sites/default/files/Calculation%20and%20presentation%20of%20the%20Stringency%20Index.pdf for information on how the stringency index was calculated.
+
+# 
+Government_Responses <- read_csv("COVID-19_Final/data/Government_Responses.csv")
+
+# First, I convert the date to a proper format.
+Government_Responses$Date <- ymd(Government_Responses$Date, quiet = FALSE, tz = NULL, locale = Sys.getlocale("LC_TIME"),
+  truncated = 0)
+order(Government_Responses$Date)
+
+# Then, I correct country and variable names.
+
+Government_Responses$COUNTRY <- Government_Responses$CountryName
+Government_Responses$COUNTRY <- ifelse(Government_Responses$COUNTRY == "Cape Verde", "Cabo Verde", Government_Responses$COUNTRY)
+Government_Responses$COUNTRY <- ifelse(Government_Responses$COUNTRY == "Congo", "Congo (Brazzaville)", Government_Responses$COUNTRY)
+Government_Responses$COUNTRY <- ifelse(Government_Responses$COUNTRY == "Democratic Republic of Congo", "Congo (Kinshasa)", Government_Responses$COUNTRY)
+Government_Responses$COUNTRY <- ifelse(Government_Responses$COUNTRY == "Myanmar", "Burma", Government_Responses$COUNTRY)
+Government_Responses$COUNTRY <- ifelse(Government_Responses$COUNTRY == "Czech Republic", "Czechia", Government_Responses$COUNTRY)
+Government_Responses$COUNTRY <- ifelse(Government_Responses$COUNTRY == "Swaziland", "Eswatini", Government_Responses$COUNTRY)
+Government_Responses$COUNTRY <- ifelse(Government_Responses$COUNTRY == "Krygz Republic", "Kyrgyzstan", Government_Responses$COUNTRY)
+Government_Responses$COUNTRY <- ifelse(Government_Responses$COUNTRY == "South Korea", "Korea, South", Government_Responses$COUNTRY)
+Government_Responses$COUNTRY <- ifelse(Government_Responses$COUNTRY == "Macedonia", "North Macedonia", Government_Responses$COUNTRY)
+Government_Responses$COUNTRY <- ifelse(Government_Responses$COUNTRY == "Slovak Republic", "Slovakia", Government_Responses$COUNTRY)
+Government_Responses$COUNTRY <- ifelse(Government_Responses$COUNTRY == "Macedonia", "North Macedonia", Government_Responses$COUNTRY)
+Government_Responses$COUNTRY <- ifelse(Government_Responses$COUNTRY == "Taiwan", "Taiwan*", Government_Responses$COUNTRY)
+Government_Responses$COUNTRY <- ifelse(Government_Responses$COUNTRY == "Timor", "Timor-Leste", Government_Responses$COUNTRY)
+Government_Responses$COUNTRY <- ifelse(Government_Responses$COUNTRY == "United States", "US", Government_Responses$COUNTRY)
+
+colnames(Government_Responses)
+
+Government_Responses$C1_School.closing <- Government_Responses$`C1_School closing`
+Government_Responses$C2_Workplace.closing <- Government_Responses$`C2_Workplace closing`
+Government_Responses$C3_Cancel.public.events <- Government_Responses$`C3_Cancel public events`
+Government_Responses$C4_Restrictions.on.gatherings <- Government_Responses$`C4_Restrictions on gatherings`
+Government_Responses$C5_Close.public.transport <- Government_Responses$`C5_Close public transport`
+Government_Responses$C6_Stay.at.home.requirements <- Government_Responses$`C6_Stay at home requirements`
+Government_Responses$C7_Restrictions.on.internal.movement <- Government_Responses$`C7_Restrictions on internal movement`
+Government_Responses$C8_International.travel.controls <- Government_Responses$`C8_International travel controls`
+Government_Responses$E1_Income.support <- Government_Responses$`E1_Income support`
+Government_Responses$E2_Debt.contract.relief <- Government_Responses$`E2_Debt/contract relief`
+Government_Responses$E3_Fiscal.measures <- Government_Responses$`E3_Fiscal measures`
+Government_Responses$E4_International.support <- Government_Responses$`E4_International support`
+Government_Responses$H1_Public.information.campaigns <- Government_Responses$`H1_Public information campaigns`
+Government_Responses$H2_Testing.policy <- Government_Responses$`H2_Testing policy`
+Government_Responses$H3_Contact.tracing <- Government_Responses$`H3_Contact tracing`
+Government_Responses$H4_Emergency.investment.in.healthcare <- Government_Responses$`H4_Emergency investment in healthcare`
+Government_Responses$H5_Investment.in.vaccines <- Government_Responses$`H5_Investment in vaccines`
+
+# I now subset the data. PLEASE NOTE the observations change in this merge. Oxford began collecting data before Hopkins started tracking cases and deaths. For simplicity, I use the merged data from before to visualize the confirmed cases and deaths (as these dates are filtered correctly).
+Government_Responses <- subset(Government_Responses, is.element(Government_Responses$COUNTRY, Temporary_Data_Country$COUNTRY))
+
+# Note that we have two sets of variables for confirmed cases and deaths. The first, I label "Oxford_Cases" and "Oxford_Deaths". The second (from John Hopkins) I label "Total_Cases_Country" and "Total_Deceased_Country". At a later date, we might want to cross-reference these values. Note that Oxford does not provide calculations for province/state; however it is highly likely they used the (same) John Hopkins data.
+Government_Responses$Oxford_Cases <- Government_Responses$ConfirmedCases
+Government_Responses$Oxford_Deaths <- Government_Responses$ConfirmedDeaths
+
+# Once more, I only keep the variables we are interested in. I elect not to keep the notes... these can be re-added if preferred. E4_International.support also has almost no values above 0, so it is dropped. 
+
+colnames(Government_Responses)
+myvarsgovernment <- c("COUNTRY", "Date", "C1_School.closing", "C1_Flag", "C2_Workplace.closing", "C2_Flag", "C3_Cancel.public.events", "C3_Flag", "C4_Restrictions.on.gatherings", "C4_Flag", "C5_Close.public.transport", "C5_Flag", "C6_Stay.at.home.requirements", "C6_Flag", "C7_Restrictions.on.internal.movement", "C7_Flag", "C8_International.travel.controls", "E1_Income.support", "E1_Flag", "E2_Debt.contract.relief", "E3_Fiscal.measures", "H1_Public.information.campaigns", "H1_Flag", "H2_Testing.policy", "H3_Contact.tracing", "H4_Emergency.investment.in.healthcare", "H5_Investment.in.vaccines", "M1_Wildcard", "StringencyIndex", "LegacyStringencyIndex", "Oxford_Cases", "Oxford_Deaths")
+
+Government_Responses <- Government_Responses[myvarsgovernment]
+
+# I then merge our data.
+Final_Data_Country <- merge(Temporary_Data_Country, Government_Responses, by = c("COUNTRY", "Date"), all=TRUE)
+
+# Next, I specify a set of lagged government response variables for use in our regression later (one-week, two-week, and three-week lags). First, I filter the data and create a lag function for each week (these functions are also used for generating the lags in our testing data).
+
+Final_Data_Country <- Final_Data_Country[order(Final_Data_Country$COUNTRY, Final_Data_Country$Date),]
+
+# This chunk of code is quite extensive. In our regressions, we use the "lag" function to generate lags for our key variables, rather than using the generated lagged variables below. I simply include them in order to visualize the dataframe with lags incorporated (as the lag function will simply lag existing variables in analysis; not generate new ones to explore). Using this function also allows us to observe which nations do not have enough observations to generate specified lags.
+
+# One Week
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C1_School.closing", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_School_Closing_One_Week", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_School_Closing_One_Week <- as.factor(Final_Data_Country$Lagged_School_Closing_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C1_Flag", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_School_Closing_General_One_Week", keepInvalid = TRUE, reminder = FALSE)
+  
+Final_Data_Country$Lagged_School_Closing_General_One_Week <- as.factor(Final_Data_Country$Lagged_School_Closing_General_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C2_Workplace.closing", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Workplace_Closing_One_Week", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Workplace_Closing_One_Week <- as.factor(Final_Data_Country$Lagged_Workplace_Closing_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C2_Flag", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Workplace_Closing_General_One_Week", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Workplace_Closing_General_One_Week <- as.factor(Final_Data_Country$Lagged_Workplace_Closing_General_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C3_Cancel.public.events", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Public_Events_One_Week", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Public_Events_One_Week <- as.factor(Final_Data_Country$Lagged_Public_Events_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C3_Flag", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Public_Events_General_One_Week", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Public_Events_General_One_Week <- as.factor(Final_Data_Country$Lagged_Public_Events_General_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C4_Restrictions.on.gatherings", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Gatherings_One_Week", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Gatherings_One_Week <- as.factor(Final_Data_Country$Lagged_Gatherings_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C4_Flag", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Gatherings_General_One_Week", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Gatherings_General_One_Week <- as.factor(Final_Data_Country$Lagged_Gatherings_General_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C5_Close.public.transport", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Public_Transport_One_Week", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Public_Transport_One_Week <- as.factor(Final_Data_Country$Lagged_Public_Transport_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C5_Flag", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Public_Transport_General_One_Week", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Public_Transport_General_One_Week <- as.factor(Final_Data_Country$Lagged_Public_Transport_General_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C6_Stay.at.home.requirements", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Lockdown_One_Week", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Lockdown_One_Week <- as.factor(Final_Data_Country$Lagged_Lockdown_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C6_Flag", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Lockdown_General_One_Week", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Lockdown_General_One_Week <- as.factor(Final_Data_Country$Lagged_Lockdown_General_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C7_Restrictions.on.internal.movement", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Internal_Movement_One_Week", keepInvalid =   
+  TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Internal_Movement_One_Week <- as.factor(Final_Data_Country$Lagged_Internal_Movement_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C7_Flag",slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Internal_Movement_General_One_Week", keepInvalid = TRUE, reminder =  FALSE)
+
+Final_Data_Country$Lagged_Internal_Movement_General_One_Week <- as.factor(Final_Data_Country$Lagged_Internal_Movement_General_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C8_International.travel.controls", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_International_Travel_One_Week", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_International_Travel_One_Week <- as.factor(Final_Data_Country$Lagged_International_Travel_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "E1_Income.support", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Income_Support_One_Week", keepInvalid =   
+  TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Income_Support_One_Week <- as.factor(Final_Data_Country$Lagged_Income_Support_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "E1_Flag",slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Income_Support_General_One_Week", keepInvalid = TRUE, reminder =  FALSE)
+
+Final_Data_Country$Lagged_Income_Support_General_One_Week <- as.factor(Final_Data_Country$Lagged_Income_Support_General_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "E2_Debt.contract.relief", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Debt_Relief_One_Week", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Debt_Relief_One_Week <- as.factor(Final_Data_Country$Lagged_Debt_Relief_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "E3_Fiscal.measures", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Fiscal_Measures_One_Week", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "H1_Public.information.campaigns", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Campaign_One_Week", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Campaign_One_Week <- as.factor(Final_Data_Country$Lagged_Campaign_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "H1_Flag", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Campaign_General_One_Week", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Campaign_General_One_Week <- as.factor(Final_Data_Country$Lagged_Campaign_General_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "H2_Testing.policy", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Testing_One_Week", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Testing_One_Week <- as.factor(Final_Data_Country$Lagged_Testing_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "H3_Contact.tracing", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Tracing_One_Week", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Tracing_One_Week <- as.factor(Final_Data_Country$Lagged_Tracing_One_Week)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "H4_Emergency.investment.in.healthcare", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Health_Care_One_Week", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "H5_Investment.in.vaccines", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Health_Care_One_Week", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "StringencyIndex", TimeVar = "Date", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Stringency_Index_One_Week", keepInvalid 
+  = TRUE, reminder = FALSE)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "LegacyStringencyIndex", TimeVar = "Date", slideBy = -7, GroupVar = "COUNTRY", NewVar = "Lagged_Legacy_Stringency_Index_One_Week", keepInvalid 
+  = TRUE, reminder = FALSE)
+  
+# Two Weeks
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C1_School.closing", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_School_Closing_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_School_Closing_Two_Weeks <- as.factor(Final_Data_Country$Lagged_School_Closing_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C1_Flag", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_School_Closing_General_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+  
+Final_Data_Country$Lagged_School_Closing_General_Two_Weeks <- as.factor(Final_Data_Country$Lagged_School_Closing_General_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C2_Workplace.closing", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Workplace_Closing_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Workplace_Closing_Two_Weeks <- as.factor(Final_Data_Country$Lagged_Workplace_Closing_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C2_Flag", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Workplace_Closing_General_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Workplace_Closing_General_Two_Weeks <- as.factor(Final_Data_Country$Lagged_Workplace_Closing_General_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C3_Cancel.public.events", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Public_Events_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Public_Events_Two_Weeks <- as.factor(Final_Data_Country$Lagged_Public_Events_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C3_Flag", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Public_Events_General_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Public_Events_General_Two_Weeks <- as.factor(Final_Data_Country$Lagged_Public_Events_General_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C4_Restrictions.on.gatherings", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Gatherings_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Gatherings_Two_Weeks <- as.factor(Final_Data_Country$Lagged_Gatherings_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C4_Flag", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Gatherings_General_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Gatherings_General_Two_Weeks <- as.factor(Final_Data_Country$Lagged_Gatherings_General_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C5_Close.public.transport", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Public_Transport_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Public_Transport_Two_Weeks <- as.factor(Final_Data_Country$Lagged_Public_Transport_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C5_Flag", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Public_Transport_General_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Public_Transport_General_Two_Weeks <- as.factor(Final_Data_Country$Lagged_Public_Transport_General_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C6_Stay.at.home.requirements", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Lockdown_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Lockdown_Two_Weeks <- as.factor(Final_Data_Country$Lagged_Lockdown_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C6_Flag", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Lockdown_General_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Lockdown_General_Two_Weeks <- as.factor(Final_Data_Country$Lagged_Lockdown_General_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C7_Restrictions.on.internal.movement", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Internal_Movement_Two_Weeks", keepInvalid =   
+  TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Internal_Movement_Two_Weeks <- as.factor(Final_Data_Country$Lagged_Internal_Movement_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C7_Flag",slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Internal_Movement_General_Two_Weeks", keepInvalid = TRUE, reminder =  FALSE)
+
+Final_Data_Country$Lagged_Internal_Movement_General_Two_Weeks <- as.factor(Final_Data_Country$Lagged_Internal_Movement_General_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C8_International.travel.controls", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_International_Travel_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_International_Travel_Two_Weeks <- as.factor(Final_Data_Country$Lagged_International_Travel_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "E1_Income.support", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Income_Support_Two_Weeks", keepInvalid =   
+  TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Income_Support_Two_Weeks <- as.factor(Final_Data_Country$Lagged_Income_Support_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "E1_Flag",slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Income_Support_General_Two_Weeks", keepInvalid = TRUE, reminder =  FALSE)
+
+Final_Data_Country$Lagged_Income_Support_General_Two_Weeks <- as.factor(Final_Data_Country$Lagged_Income_Support_General_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "E2_Debt.contract.relief", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Debt_Relief_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Debt_Relief_Two_Weeks <- as.factor(Final_Data_Country$Lagged_Debt_Relief_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "E3_Fiscal.measures", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Fiscal_Measures_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "H1_Public.information.campaigns", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Campaign_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Campaign_Two_Weeks <- as.factor(Final_Data_Country$Lagged_Campaign_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "H1_Flag", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Campaign_General_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Campaign_General_Two_Weeks <- as.factor(Final_Data_Country$Lagged_Campaign_General_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "H2_Testing.policy", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Testing_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Testing_Two_Weeks <- as.factor(Final_Data_Country$Lagged_Testing_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "H3_Contact.tracing", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Tracing_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Tracing_Two_Weeks <- as.factor(Final_Data_Country$Lagged_Tracing_Two_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "H4_Emergency.investment.in.healthcare", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Health_Care_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "H5_Investment.in.vaccines", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Health_Care_Two_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "StringencyIndex", TimeVar = "Date", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Stringency_Index_Two_Weeks", keepInvalid 
+  = TRUE, reminder = FALSE)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "LegacyStringencyIndex", TimeVar = "Date", slideBy = -14, GroupVar = "COUNTRY", NewVar = "Lagged_Legacy_Stringency_Index_Two_Weeks", keepInvalid 
+  = TRUE, reminder = FALSE)
+
+# Three Weeks
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C1_School.closing", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_School_Closing_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_School_Closing_Three_Weeks <- as.factor(Final_Data_Country$Lagged_School_Closing_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C1_Flag", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_School_Closing_General_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+  
+Final_Data_Country$Lagged_School_Closing_General_Three_Weeks <- as.factor(Final_Data_Country$Lagged_School_Closing_General_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C2_Workplace.closing", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Workplace_Closing_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Workplace_Closing_Three_Weeks <- as.factor(Final_Data_Country$Lagged_Workplace_Closing_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C2_Flag", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Workplace_Closing_General_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Workplace_Closing_General_Three_Weeks <- as.factor(Final_Data_Country$Lagged_Workplace_Closing_General_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C3_Cancel.public.events", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Public_Events_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Public_Events_Three_Weeks <- as.factor(Final_Data_Country$Lagged_Public_Events_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C3_Flag", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Public_Events_General_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Public_Events_General_Three_Weeks <- as.factor(Final_Data_Country$Lagged_Public_Events_General_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C4_Restrictions.on.gatherings", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Gatherings_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Gatherings_Three_Weeks <- as.factor(Final_Data_Country$Lagged_Gatherings_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C4_Flag", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Gatherings_General_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Gatherings_General_Three_Weeks <- as.factor(Final_Data_Country$Lagged_Gatherings_General_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C5_Close.public.transport", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Public_Transport_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Public_Transport_Three_Weeks <- as.factor(Final_Data_Country$Lagged_Public_Transport_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C5_Flag", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Public_Transport_General_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Public_Transport_General_Three_Weeks <- as.factor(Final_Data_Country$Lagged_Public_Transport_General_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C6_Stay.at.home.requirements", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Lockdown_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Lockdown_Three_Weeks <- as.factor(Final_Data_Country$Lagged_Lockdown_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C6_Flag", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Lockdown_General_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Lockdown_General_Three_Weeks <- as.factor(Final_Data_Country$Lagged_Lockdown_General_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C7_Restrictions.on.internal.movement", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Internal_Movement_Three_Weeks", keepInvalid =   
+  TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Internal_Movement_Three_Weeks <- as.factor(Final_Data_Country$Lagged_Internal_Movement_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C7_Flag",slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Internal_Movement_General_Three_Weeks", keepInvalid = TRUE, reminder =  FALSE)
+
+Final_Data_Country$Lagged_Internal_Movement_General_Three_Weeks <- as.factor(Final_Data_Country$Lagged_Internal_Movement_General_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "C8_International.travel.controls", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_International_Travel_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_International_Travel_Three_Weeks <- as.factor(Final_Data_Country$Lagged_International_Travel_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "E1_Income.support", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Income_Support_Three_Weeks", keepInvalid =   
+  TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Income_Support_Three_Weeks <- as.factor(Final_Data_Country$Lagged_Income_Support_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "E1_Flag",slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Income_Support_General_Three_Weeks", keepInvalid = TRUE, reminder =  FALSE)
+
+Final_Data_Country$Lagged_Income_Support_General_Three_Weeks <- as.factor(Final_Data_Country$Lagged_Income_Support_General_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "E2_Debt.contract.relief", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Debt_Relief_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Debt_Relief_Three_Weeks <- as.factor(Final_Data_Country$Lagged_Debt_Relief_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "E3_Fiscal.measures", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Fiscal_Measures_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "H1_Public.information.campaigns", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Campaign_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Campaign_Three_Weeks <- as.factor(Final_Data_Country$Lagged_Campaign_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "H1_Flag", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Campaign_General_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Campaign_General_Three_Weeks <- as.factor(Final_Data_Country$Lagged_Campaign_General_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "H2_Testing.policy", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Testing_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Testing_Three_Weeks <- as.factor(Final_Data_Country$Lagged_Testing_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "H3_Contact.tracing", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Tracing_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country$Lagged_Tracing_Three_Weeks <- as.factor(Final_Data_Country$Lagged_Tracing_Three_Weeks)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "H4_Emergency.investment.in.healthcare", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Health_Care_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "H5_Investment.in.vaccines", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Health_Care_Three_Weeks", keepInvalid = TRUE, reminder = FALSE)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "StringencyIndex", TimeVar = "Date", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Stringency_Index_Three_Weeks", keepInvalid 
+  = TRUE, reminder = FALSE)
+
+Final_Data_Country <- Final_Data_Country %>%
+  dplyr::group_by(COUNTRY) %>%
+  slide(Var = "LegacyStringencyIndex", TimeVar = "Date", slideBy = -21, GroupVar = "COUNTRY", NewVar = "Lagged_Legacy_Stringency_Index_Three_Weeks", keepInvalid 
+  = TRUE, reminder = FALSE)
+```
+
+# Here, I add coordinates for each nation in the dataset.
+```{r coordinates 2}
+Final_Data_Country <- Final_Data_Country[order(Final_Data_Country$COUNTRY, Final_Data_Country$Date),]
+
+# I am using the same Google coordinate data from: https://developers.google.com/public-data/docs/canonical/countries_csv. Note that I edited country names to match the data in the CSV itself (I only kept coordinates for nations in our dataframe). 
+Country_Coordinates <- read.csv("COVID-19_Final/data/Country_Coordinates.csv")
+
+Country_Coordinates$COUNTRY <- Country_Coordinates$Country
+
+colnames(Country_Coordinates)
+myvarscoords <- c("COUNTRY", "Latitude", "Longitude")
+Country_Coordinates <- Country_Coordinates[myvarscoords]
+
+# I subset the file to only include the nations in our final data.
+Country_Coordinates <- subset(Country_Coordinates, is.element(Country_Coordinates$COUNTRY, Final_Data_Country$COUNTRY))
+
+# Lastly, I merge the two dataframes.
+Final_Data_Country <- merge(Final_Data_Country, Country_Coordinates, by = c("COUNTRY"), all=TRUE)
+
+```
+
+# Now, I add socioeconomic controls from the World Development Indicators.
+
+```{r controls}
+Final_Data_Country <- Final_Data_Country[order(Final_Data_Country$COUNTRY, Final_Data_Country$Date),]
+
+# First, I add the proportion of the national population above 65 from: https://data.worldbank.org/indicator/SP.POP.65UP.TO.ZS. 
+pop65yo <- read_csv("COVID-19_Final/data/pop65yo.csv")
+
+pop65yo$COUNTRY <- pop65yo$country
+pop65yo$prop65 <- pop65yo$value
+
+# Next, I correct the country names.
+pop65yo[19, "COUNTRY"] <- "Bahamas"
+pop65yo[26, "COUNTRY"] <- "Brunei"
+pop65yo[37, "COUNTRY"] <- "Congo (Kinshasa)"
+pop65yo[38, "COUNTRY"] <- "Congo (Brazzaville)"
+pop65yo[46, "COUNTRY"] <- "Czechia"
+pop65yo[53, "COUNTRY"] <- "Egypt"
+pop65yo[66, "COUNTRY"] <- "Gambia"
+pop65yo[82, "COUNTRY"] <- "Iran"
+pop65yo[95, "COUNTRY"] <- "Korea, South"
+pop65yo[92, "COUNTRY"] <- "Kyrgyzstan"
+pop65yo[97, "COUNTRY"] <- "Laos"
+pop65yo[101, "COUNTRY"] <- "Saint Lucia"
+pop65yo[116, "COUNTRY"] <- "Burma"
+pop65yo[148, "COUNTRY"] <- "Russia"
+pop65yo[162, "COUNTRY"] <- "Slovakia"
+pop65yo[167, "COUNTRY"] <- "Syria"
+pop65yo[182, "COUNTRY"] <- "US"
+pop65yo[184, "COUNTRY"] <- "Saint Vincent and the Grenadines"
+pop65yo[185, "COUNTRY"] <- "Venezuela"
+pop65yo[186, "COUNTRY"] <- "Virgin Islands"
+pop65yo[190, "COUNTRY"] <- "Yemen"
+pop65yo[5, "COUNTRY"] <- "United Arab Emirates"
+pop65yo[62, "COUNTRY"] <- "United Kingdom"
+pop65yo[132, "COUNTRY"] <- "New Zealand"
+pop65yo[150, "COUNTRY"] <- "Saudi Arabia"
+pop65yo[191, "COUNTRY"] <- "South Africa"
+
+pop65yo <- subset(pop65yo, is.element(pop65yo$COUNTRY, Final_Data_Country$COUNTRY))
+
+# I only keep the columns I care about.
+colnames(pop65yo)
+myvarspop65yo <- c("prop65", "COUNTRY")
+
+pop65yo <- pop65yo[myvarspop65yo]
+
+pop65yo <- pop65yo[order(pop65yo$COUNTRY, pop65yo$prop65),]
+
+Final_Data_Country <- Final_Data_Country[order(Final_Data_Country$COUNTRY, Final_Data_Country$Date),]
+
+Final_Data_Country <- merge(Final_Data_Country, pop65yo, by = c("COUNTRY"), all=TRUE)
+
+Final_Data_Country <- Final_Data_Country[order(Final_Data_Country$COUNTRY, Final_Data_Country$Date),]
+
+# Now, I add another world development indicator for the proportion of the population which is urban: https://data.worldbank.org/indicator/SP.URB.TOTL.in.zs. 
+urbanpp <- read_csv("COVID-19_Final/data/urbanpp.csv")
+
+# Next, I correct the country names.
+urbanpp[21, "COUNTRY"] <- "Bahamas"
+urbanpp[29, "COUNTRY"] <- "Brunei"
+urbanpp[40, "COUNTRY"] <- "Congo (Kinshasa)"
+urbanpp[41, "COUNTRY"] <- "Congo (Brazzaville)"
+urbanpp[50, "COUNTRY"] <- "Czechia"
+urbanpp[58, "COUNTRY"] <- "Egypt"
+urbanpp[73, "COUNTRY"] <- "Gambia"
+urbanpp[91, "COUNTRY"] <- "Iran"
+urbanpp[105, "COUNTRY"] <- "Korea, South"
+urbanpp[101, "COUNTRY"] <- "Kyrgyzstan"
+urbanpp[107, "COUNTRY"] <- "Laos"
+urbanpp[111, "COUNTRY"] <- "Saint Lucia"
+urbanpp[129, "COUNTRY"] <- "Burma"
+urbanpp[164, "COUNTRY"] <- "Russia"
+urbanpp[179, "COUNTRY"] <- "Slovakia"
+urbanpp[185, "COUNTRY"] <- "Syria"
+urbanpp[202, "COUNTRY"] <- "US"
+urbanpp[204, "COUNTRY"] <- "Saint Vincent and the Grenadines"
+urbanpp[205, "COUNTRY"] <- "Venezuela"
+urbanpp[206, "COUNTRY"] <- "Virgin Islands"
+urbanpp[211, "COUNTRY"] <- "Yemen"
+urbanpp[6, "COUNTRY"] <- "United Arab Emirates"
+urbanpp[68, "COUNTRY"] <- "United Kingdom"
+urbanpp[147, "COUNTRY"] <- "New Zealand"
+urbanpp[166, "COUNTRY"] <- "Saudi Arabia"
+urbanpp[212, "COUNTRY"] <- "South Africa"
+
+urbanpp <- subset(urbanpp, is.element(urbanpp$COUNTRY, Final_Data_Country$COUNTRY))
+
+# I only keep the columns I care about.
+colnames(urbanpp)
+myvarsurbanpp <- c("propurban", "COUNTRY")
+
+urbanpp <- urbanpp[myvarsurbanpp]
+
+Final_Data_Country <- merge(Final_Data_Country, urbanpp, by = c("COUNTRY"), all=TRUE)
+
+Final_Data_Country <- Final_Data_Country[order(Final_Data_Country$COUNTRY, Final_Data_Country$Date),]
+
+# Now, I add the population density indicator. Note the latest year available for this data is 2018. 
+popdensity <- read.csv("COVID-19_Final/data/popdensity.csv")
+  
+popdensity$COUNTRY <- popdensity$Country.Name
+
+# Next, I correct the country names.
+popdensity[22, "COUNTRY"] <- "Bahamas"
+popdensity[30, "COUNTRY"] <- "Brunei"
+popdensity[42, "COUNTRY"] <- "Congo (Kinshasa)"
+popdensity[43, "COUNTRY"] <- "Congo (Brazzaville)"
+popdensity[53, "COUNTRY"] <- "Czechia"
+popdensity[66, "COUNTRY"] <- "Egypt"
+popdensity[85, "COUNTRY"] <- "Gambia"
+popdensity[111, "COUNTRY"] <- "Iran"
+popdensity[125, "COUNTRY"] <- "Korea, South"
+popdensity[121, "COUNTRY"] <- "Kyrgyzstan"
+popdensity[128, "COUNTRY"] <- "Laos"
+popdensity[132, "COUNTRY"] <- "Saint Lucia"
+popdensity[159, "COUNTRY"] <- "Burma"
+popdensity[201, "COUNTRY"] <- "Russia"
+popdensity[220, "COUNTRY"] <- "Slovakia"
+popdensity[226, "COUNTRY"] <- "Syria"
+popdensity[250, "COUNTRY"] <- "US"
+popdensity[252, "COUNTRY"] <- "Saint Vincent and the Grenadines"
+popdensity[253, "COUNTRY"] <- "Venezuela"
+popdensity[255, "COUNTRY"] <- "Virgin Islands"
+popdensity[261, "COUNTRY"] <- "Yemen"
+popdensity[7, "COUNTRY"] <- "United Arab Emirates"
+popdensity[80, "COUNTRY"] <- "United Kingdom"
+popdensity[179, "COUNTRY"] <- "New Zealand"
+popdensity[204, "COUNTRY"] <- "Saudi Arabia"
+popdensity[262, "COUNTRY"] <- "South Africa"
+
+popdensity <- subset(popdensity, COUNTRY %in% Final_Data_Country$COUNTRY)
+
+# I only keep the columns I care about.
+colnames(popdensity)
+myvarspopdensity <- c("popdensity", "COUNTRY")
+
+popdensity <- popdensity[myvarspopdensity]
+
+popdensity <- popdensity[order(popdensity$COUNTRY, popdensity$popdensity),]
+
+Final_Data_Country <- Final_Data_Country[order(Final_Data_Country$COUNTRY, Final_Data_Country$Date),]
+
+Final_Data_Country <- merge(Final_Data_Country, popdensity, by = c("COUNTRY"), all=TRUE)
+
+Final_Data_Country <- Final_Data_Country[order(Final_Data_Country$COUNTRY, Final_Data_Country$Date),]  
+  
+```
+
+# Merging the testing data. 
+
+***** This has been commented out for now, because of the poor quality of the data. However, the dataframe is updated with the newest results each time the chunk is run. If we want to re-implement testing in some way, we can uncomment and run this chunk. *****
+```{r testing}
+# Next, I add our testing data from:
+# owurl = "https://raw.githubusercontent.com/owid/covid-19-data/master/public/data/testing/covid-testing-all-observations.csv"
+# testcap <- read_csv(url(owurl))
+# testcap <- separate(testcap, Entity, into=c("Country", "Unit type"), sep = " - ") 
+# write_csv(testcap, path = "/Users/sameernair-desai/Desktop/COVID-19_Final/data/testcap.csv")
+
+# testcap$COUNTRY <- testcap$Country
+# testcap$COUNTRY <- ifelse(testcap$COUNTRY == "Czech Republic", "Czechia", testcap$COUNTRY)
+# testcap$COUNTRY <- ifelse(testcap$COUNTRY == "South Korea", "Korea, South", testcap$COUNTRY)
+# testcap$COUNTRY <- ifelse(testcap$COUNTRY == "Taiwan", "Taiwan*", testcap$COUNTRY)
+# testcap$COUNTRY <- ifelse(testcap$COUNTRY == "United States", "US", testcap$COUNTRY)
+ 
+# testcap <- subset(testcap, is.element(testcap$COUNTRY, Final_Data_Country$COUNTRY))
+
+# I don't like some of the variable names in the original data, so I change them below.
+# testcap$Test_Type <- testcap$`Unit type`
+# testcap$Cumulative_Tests <- testcap$`Cumulative total`
+# testcap$Daily_Change_Cumulative_Tests <- testcap$`Daily change in cumulative total`
+# testcap$Cumulative_Tests_Per_Thousand <- testcap$`Cumulative total per thousand`
+# testcap$Daily_Change_Cumulative_Tests_Per_Thousand <- testcap$`Daily change in cumulative total per thousand`
+# testcap$Three_Day_Rolling_Mean_Tests <- testcap$`3-day rolling mean daily change`
+# testcap$Three_Day_Rolling_Mean_Tests_Per_Thousand <- testcap$`3-day rolling mean daily change per thousand`
+# 
+# Here, I keep the variables I care about.
+# colnames(testcap)
+# myvarstest <- c("COUNTRY", "Date", "Test_Type", "Cumulative_Tests", "Daily_Change_Cumulative_Tests", "Cumulative_Tests_Per_Thousand", "Daily_Change_Cumulative_Tests_Per_Thousand", "Three_Day_Rolling_Mean_Tests", "Three_Day_Rolling_Mean_Tests_Per_Thousand")
+
+# testcap <- testcap[myvarstest]
+ 
+# Now, I convert from long to wide format.
+# testcap <- pivot_wider(testcap, id_cols = c("COUNTRY", "Date", "Test_Type"), names_from = "Test_Type", values_from = c("Cumulative_Tests", "Daily_Change_Cumulative_Tests", "Cumulative_Tests_Per_Thousand", "Daily_Change_Cumulative_Tests_Per_Thousand", "Three_Day_Rolling_Mean_Tests", "Three_Day_Rolling_Mean_Tests_Per_Thousand"))
+
+# Now, I merge the data to our final file.
+# Final_Data_Country <- merge(Final_Data_Country, testcap, by = c("COUNTRY", "Date"), all=TRUE)
+```
+
+# Merging the mobility data.
+
+```{r mobility}
+Final_Data_Country <- Final_Data_Country[order(Final_Data_Country$COUNTRY, Final_Data_Country$Date),]
+
+# Here, I integrate the Apple Mobility data. 
+
+mobility <- read.csv("COVID-19_Final/data/applemobilitytrends-2020-04-27.csv")
+
+# First, we convert from wide to long format.
+mobility <- pivot_longer(mobility, cols = starts_with("X"), names_to = "Dates")
+
+# Next, we reformat the dates.
+mobility$Dates<-sub(".", "", mobility$Dates)
+mobility$Date <- mdy(mobility$Dates, quiet = FALSE, tz = NULL, locale = Sys.getlocale("LC_TIME"),
+  truncated = 0)
+
+# I only keep the variables we care about. I also filter for only countries (we can re-add cities at a later period).
+
+mobility <- mobility %>%
+  dplyr:: filter(mobility$geo_type == "country/region")
+
+colnames(mobility)
+myvarsmobility <- c("region", "transportation_type", "Date", "value")
+
+mobility <- mobility[myvarsmobility]
+
+mobility$COUNTRY <- mobility$region
+
+# Now, I re-convert from long to wide format.
+mobility <- pivot_wider(mobility, id_cols = c("COUNTRY", "Date", "transportation_type"), names_from = "transportation_type", values_from = c("value"))
+
+# Next, we ensure the countries from the mobility file and our data align.
+
+mobility$COUNTRY <- ifelse(mobility$COUNTRY == "Czech Republic", "Czechia", mobility$COUNTRY)
+mobility$COUNTRY <- ifelse(mobility$COUNTRY == "Republic of Korea", "Korea, South", mobility$COUNTRY)
+mobility$COUNTRY <- ifelse(mobility$COUNTRY == "Taiwan", "Taiwan*", mobility$COUNTRY)
+mobility$COUNTRY <- ifelse(mobility$COUNTRY == "UK", "United Kingdom", mobility$COUNTRY)
+mobility$COUNTRY <- ifelse(mobility$COUNTRY == "United States", "US", mobility$COUNTRY)
+
+mobility <- subset(mobility, is.element(mobility$COUNTRY, Final_Data_Country$COUNTRY))
+
+Final_Data_Country <- merge(Final_Data_Country, mobility, by = c("COUNTRY", "Date"), all=TRUE)
+
+```
+
+# Now, I add our controls for cross-country travel.
+```{r travel}
+Final_Data_Country <- Final_Data_Country[order(Final_Data_Country$COUNTRY, Final_Data_Country$Date),]
+
+# First, I add information on the number of tourist arrivals (2018 is l.y.a.). Run this in the console
+arrivals <- read.csv("COVID-19_Final/data/arrivals.csv")
+
+arrivals$COUNTRY <- arrivals$Country.Name
+
+# Next, I correct the country names.
+arrivals[22, "COUNTRY"] <- "Bahamas"
+arrivals[30, "COUNTRY"] <- "Brunei"
+arrivals[42, "COUNTRY"] <- "Congo (Kinshasa)"
+arrivals[43, "COUNTRY"] <- "Congo (Brazzaville)"
+arrivals[53, "COUNTRY"] <- "Czechia"
+arrivals[66, "COUNTRY"] <- "Egypt"
+arrivals[85, "COUNTRY"] <- "Gambia"
+arrivals[111, "COUNTRY"] <- "Iran"
+arrivals[125, "COUNTRY"] <- "Korea, South"
+arrivals[121, "COUNTRY"] <- "Kyrgyzstan"
+arrivals[128, "COUNTRY"] <- "Laos"
+arrivals[132, "COUNTRY"] <- "Saint Lucia"
+arrivals[159, "COUNTRY"] <- "Burma"
+arrivals[201, "COUNTRY"] <- "Russia"
+arrivals[220, "COUNTRY"] <- "Slovakia"
+arrivals[226, "COUNTRY"] <- "Syria"
+arrivals[250, "COUNTRY"] <- "US"
+arrivals[252, "COUNTRY"] <- "Saint Vincent and the Grenadines"
+arrivals[253, "COUNTRY"] <- "Venezuela"
+arrivals[255, "COUNTRY"] <- "Virgin Islands"
+arrivals[261, "COUNTRY"] <- "Yemen"
+arrivals[7, "COUNTRY"] <- "United Arab Emirates"
+arrivals[80, "COUNTRY"] <- "United Kingdom"
+arrivals[179, "COUNTRY"] <- "New Zealand"
+arrivals[204, "COUNTRY"] <- "Saudi Arabia"
+arrivals[262, "COUNTRY"] <- "South Africa"
+
+arrivals <- subset(arrivals, COUNTRY %in% Final_Data_Country$COUNTRY)
+
+# I only keep the columns I care about.
+colnames(arrivals)
+myvarsarrivals <- c("arrivals", "COUNTRY")
+
+arrivals <- arrivals[myvarsarrivals]
+
+Final_Data_Country <- merge(Final_Data_Country, arrivals, by = c("COUNTRY"), all=TRUE)
+
+Final_Data_Country <- Final_Data_Country[order(Final_Data_Country$COUNTRY, Final_Data_Country$Date),]
+
+# Next, I add information on tourism departures (2018 is l.y.a.). 
+departures <- read.csv("COVID-19_Final/data/departures.csv")
+
+departures$COUNTRY <- departures$Country.Name
+
+# Next, I correct the country names.
+departures[22, "COUNTRY"] <- "Bahamas"
+departures[30, "COUNTRY"] <- "Brunei"
+departures[42, "COUNTRY"] <- "Congo (Kinshasa)"
+departures[43, "COUNTRY"] <- "Congo (Brazzaville)"
+departures[53, "COUNTRY"] <- "Czechia"
+departures[66, "COUNTRY"] <- "Egypt"
+departures[85, "COUNTRY"] <- "Gambia"
+departures[111, "COUNTRY"] <- "Iran"
+departures[125, "COUNTRY"] <- "Korea, South"
+departures[121, "COUNTRY"] <- "Kyrgyzstan"
+departures[128, "COUNTRY"] <- "Laos"
+departures[132, "COUNTRY"] <- "Saint Lucia"
+departures[159, "COUNTRY"] <- "Burma"
+departures[201, "COUNTRY"] <- "Russia"
+departures[220, "COUNTRY"] <- "Slovakia"
+departures[226, "COUNTRY"] <- "Syria"
+departures[250, "COUNTRY"] <- "US"
+departures[252, "COUNTRY"] <- "Saint Vincent and the Grenadines"
+departures[253, "COUNTRY"] <- "Venezuela"
+departures[255, "COUNTRY"] <- "Virgin Islands"
+departures[261, "COUNTRY"] <- "Yemen"
+departures[7, "COUNTRY"] <- "United Arab Emirates"
+departures[80, "COUNTRY"] <- "United Kingdom"
+departures[179, "COUNTRY"] <- "New Zealand"
+departures[204, "COUNTRY"] <- "Saudi Arabia"
+departures[262, "COUNTRY"] <- "South Africa"
+
+departures <- subset(departures, COUNTRY %in% Final_Data_Country$COUNTRY)
+
+# I only keep the columns I care about.
+colnames(departures)
+myvarsdepartures <- c("departures", "COUNTRY")
+
+departures <- departures[myvarsdepartures]
+
+Final_Data_Country <- merge(Final_Data_Country, departures, by = c("COUNTRY"), all=TRUE)
+
+Final_Data_Country <- Final_Data_Country[order(Final_Data_Country$COUNTRY, Final_Data_Country$Date),]
+
+```
+
+# Now, I add additional country-specific characteristics gathered from the World Bank. All data is from 2018, unless noted.
+```{r world bank}
+Final_Data_Country <- Final_Data_Country[order(Final_Data_Country$COUNTRY, Final_Data_Country$Date),]
+
+# First, I add the percentage of vulnerable employment by nation from: https://data.worldbank.org/indicator/SL.EMP.VULN.ZS?view=chart 
+vulnerable_employment <- read.csv("COVID-19_Final/data/vulnerable_employment.csv")
+
+# Next, I correct the country names.
+vulnerable_employment[22, "COUNTRY"] <- "Bahamas"
+vulnerable_employment[30, "COUNTRY"] <- "Brunei"
+vulnerable_employment[42, "COUNTRY"] <- "Congo (Kinshasa)"
+vulnerable_employment[43, "COUNTRY"] <- "Congo (Brazzaville)"
+vulnerable_employment[53, "COUNTRY"] <- "Czechia"
+vulnerable_employment[66, "COUNTRY"] <- "Egypt"
+vulnerable_employment[85, "COUNTRY"] <- "Gambia"
+vulnerable_employment[111, "COUNTRY"] <- "Iran"
+vulnerable_employment[125, "COUNTRY"] <- "Korea, South"
+vulnerable_employment[121, "COUNTRY"] <- "Kyrgyzstan"
+vulnerable_employment[128, "COUNTRY"] <- "Laos"
+vulnerable_employment[132, "COUNTRY"] <- "Saint Lucia"
+vulnerable_employment[159, "COUNTRY"] <- "Burma"
+vulnerable_employment[201, "COUNTRY"] <- "Russia"
+vulnerable_employment[220, "COUNTRY"] <- "Slovakia"
+vulnerable_employment[226, "COUNTRY"] <- "Syria"
+vulnerable_employment[250, "COUNTRY"] <- "US"
+vulnerable_employment[252, "COUNTRY"] <- "Saint Vincent and the Grenadines"
+vulnerable_employment[253, "COUNTRY"] <- "Venezuela"
+vulnerable_employment[255, "COUNTRY"] <- "Virgin Islands"
+vulnerable_employment[261, "COUNTRY"] <- "Yemen"
+vulnerable_employment[7, "COUNTRY"] <- "United Arab Emirates"
+vulnerable_employment[80, "COUNTRY"] <- "United Kingdom"
+vulnerable_employment[179, "COUNTRY"] <- "New Zealand"
+vulnerable_employment[204, "COUNTRY"] <- "Saudi Arabia"
+vulnerable_employment[262, "COUNTRY"] <- "South Africa"
+
+vulnerable_employment <- subset(vulnerable_employment, COUNTRY %in% Final_Data_Country$COUNTRY)
+
+# I only keep the columns I care about.
+colnames(vulnerable_employment)
+myvarsvulnerable_employment <- c("vul_emp", "COUNTRY")
+
+vulnerable_employment <- vulnerable_employment[myvarsvulnerable_employment]
+
+Final_Data_Country <- merge(Final_Data_Country, vulnerable_employment, by = c("COUNTRY"), all=TRUE)
+
+Final_Data_Country <- Final_Data_Country[order(Final_Data_Country$COUNTRY, Final_Data_Country$Date),]
+
+# Next, I add GNI per capita from: https://data.worldbank.org/indicator/NY.GNP.PCAP.CD?view=chart. 
+GNI <- read.csv("COVID-19_Final/data/GNI.csv")
+
+# Next, I correct the country names.
+GNI[22, "COUNTRY"] <- "Bahamas"
+GNI[30, "COUNTRY"] <- "Brunei"
+GNI[42, "COUNTRY"] <- "Congo (Kinshasa)"
+GNI[43, "COUNTRY"] <- "Congo (Brazzaville)"
+GNI[53, "COUNTRY"] <- "Czechia"
+GNI[66, "COUNTRY"] <- "Egypt"
+GNI[85, "COUNTRY"] <- "Gambia"
+GNI[111, "COUNTRY"] <- "Iran"
+GNI[125, "COUNTRY"] <- "Korea, South"
+GNI[121, "COUNTRY"] <- "Kyrgyzstan"
+GNI[128, "COUNTRY"] <- "Laos"
+GNI[132, "COUNTRY"] <- "Saint Lucia"
+GNI[159, "COUNTRY"] <- "Burma"
+GNI[201, "COUNTRY"] <- "Russia"
+GNI[220, "COUNTRY"] <- "Slovakia"
+GNI[226, "COUNTRY"] <- "Syria"
+GNI[250, "COUNTRY"] <- "US"
+GNI[252, "COUNTRY"] <- "Saint Vincent and the Grenadines"
+GNI[253, "COUNTRY"] <- "Venezuela"
+GNI[255, "COUNTRY"] <- "Virgin Islands"
+GNI[261, "COUNTRY"] <- "Yemen"
+GNI[7, "COUNTRY"] <- "United Arab Emirates"
+GNI[80, "COUNTRY"] <- "United Kingdom"
+GNI[179, "COUNTRY"] <- "New Zealand"
+GNI[204, "COUNTRY"] <- "Saudi Arabia"
+GNI[262, "COUNTRY"] <- "South Africa"
+
+GNI <- subset(GNI, COUNTRY %in% Final_Data_Country$COUNTRY)
+
+# I only keep the columns I care about.
+colnames(GNI)
+myvarsGNI <- c("GNI", "COUNTRY")
+
+GNI <- GNI[myvarsGNI]
+
+Final_Data_Country <- merge(Final_Data_Country, GNI, by = c("COUNTRY"), all=TRUE)
+
+Final_Data_Country <- Final_Data_Country[order(Final_Data_Country$COUNTRY, Final_Data_Country$Date),]
+
+# Next, I control for current health expenditures (l.y.a. is 2017): https://data.worldbank.org/indicator/SH.XPD.CHEX.PC.CD?view=chart. 
+health_pc <- read.csv("COVID-19_Final/data/health_pc.csv")
+
+# Next, I correct the country names.
+health_pc[22, "COUNTRY"] <- "Bahamas"
+health_pc[30, "COUNTRY"] <- "Brunei"
+health_pc[42, "COUNTRY"] <- "Congo (Kinshasa)"
+health_pc[43, "COUNTRY"] <- "Congo (Brazzaville)"
+health_pc[53, "COUNTRY"] <- "Czechia"
+health_pc[66, "COUNTRY"] <- "Egypt"
+health_pc[85, "COUNTRY"] <- "Gambia"
+health_pc[111, "COUNTRY"] <- "Iran"
+health_pc[125, "COUNTRY"] <- "Korea, South"
+health_pc[121, "COUNTRY"] <- "Kyrgyzstan"
+health_pc[128, "COUNTRY"] <- "Laos"
+health_pc[132, "COUNTRY"] <- "Saint Lucia"
+health_pc[159, "COUNTRY"] <- "Burma"
+health_pc[201, "COUNTRY"] <- "Russia"
+health_pc[220, "COUNTRY"] <- "Slovakia"
+health_pc[226, "COUNTRY"] <- "Syria"
+health_pc[250, "COUNTRY"] <- "US"
+health_pc[252, "COUNTRY"] <- "Saint Vincent and the Grenadines"
+health_pc[253, "COUNTRY"] <- "Venezuela"
+health_pc[255, "COUNTRY"] <- "Virgin Islands"
+health_pc[261, "COUNTRY"] <- "Yemen"
+health_pc[7, "COUNTRY"] <- "United Arab Emirates"
+health_pc[80, "COUNTRY"] <- "United Kingdom"
+health_pc[179, "COUNTRY"] <- "New Zealand"
+health_pc[204, "COUNTRY"] <- "Saudi Arabia"
+health_pc[262, "COUNTRY"] <- "South Africa"
+
+health_pc <- subset(health_pc, COUNTRY %in% Final_Data_Country$COUNTRY)
+
+# I only keep the columns I care about.
+colnames(health_pc)
+myvarshealth_pc <- c("health_exp", "COUNTRY")
+
+health_pc <- health_pc[myvarshealth_pc]
+
+Final_Data_Country <- merge(Final_Data_Country, health_pc, by = c("COUNTRY"), all=TRUE)
+
+Final_Data_Country <- Final_Data_Country[order(Final_Data_Country$COUNTRY, Final_Data_Country$Date),]
+
+# I also add data on air pollution by nation from: https://data.worldbank.org/indicator/EN.ATM.PM25.MC.M3?view=chart. 
+pollution <- read.csv("COVID-19_Final/data/pollution.csv")
+
+# Next, I correct the country names.
+pollution[22, "COUNTRY"] <- "Bahamas"
+pollution[30, "COUNTRY"] <- "Brunei"
+pollution[42, "COUNTRY"] <- "Congo (Kinshasa)"
+pollution[43, "COUNTRY"] <- "Congo (Brazzaville)"
+pollution[53, "COUNTRY"] <- "Czechia"
+pollution[66, "COUNTRY"] <- "Egypt"
+pollution[85, "COUNTRY"] <- "Gambia"
+pollution[111, "COUNTRY"] <- "Iran"
+pollution[125, "COUNTRY"] <- "Korea, South"
+pollution[121, "COUNTRY"] <- "Kyrgyzstan"
+pollution[128, "COUNTRY"] <- "Laos"
+pollution[132, "COUNTRY"] <- "Saint Lucia"
+pollution[159, "COUNTRY"] <- "Burma"
+pollution[201, "COUNTRY"] <- "Russia"
+pollution[220, "COUNTRY"] <- "Slovakia"
+pollution[226, "COUNTRY"] <- "Syria"
+pollution[250, "COUNTRY"] <- "US"
+pollution[252, "COUNTRY"] <- "Saint Vincent and the Grenadines"
+pollution[253, "COUNTRY"] <- "Venezuela"
+pollution[255, "COUNTRY"] <- "Virgin Islands"
+pollution[261, "COUNTRY"] <- "Yemen"
+pollution[7, "COUNTRY"] <- "United Arab Emirates"
+pollution[80, "COUNTRY"] <- "United Kingdom"
+pollution[179, "COUNTRY"] <- "New Zealand"
+pollution[204, "COUNTRY"] <- "Saudi Arabia"
+pollution[262, "COUNTRY"] <- "South Africa"
+
+pollution <- subset(pollution, COUNTRY %in% Final_Data_Country$COUNTRY)
+
+# I only keep the columns I care about.
+colnames(pollution)
+myvarspollution <- c("pollution", "COUNTRY")
+
+pollution <- pollution[myvarspollution]
+
+Final_Data_Country <- merge(Final_Data_Country, pollution, by = c("COUNTRY"), all=TRUE)
+
+# Here, I add democracy indicators from Freedom House: https://freedomhouse.org/countries/freedom-world/scores and the Economist: https://www.eiu.com/topic/democracy-index?&zid=democracyindex2019&utm_source=blog&utm_medium=blog&utm_name=democracyindex2019&utm_term=democracyindex2019&utm_content=top_link. 
+
+democracy <- read.csv("COVID-19_Final/data/democracy.csv")
+
+democracy <- subset(democracy, COUNTRY %in% Final_Data_Country$COUNTRY)
+
+# I only keep the columns I care about.
+colnames(democracy)
+myvarsdemocracy <- c("EUI_democracy", "freedom_house", "COUNTRY")
+
+democracy <- democracy[myvarsdemocracy]
+
+Final_Data_Country <- merge(Final_Data_Country, democracy, by = c("COUNTRY"), all=TRUE)
+
+# Here, I add data on the number of cellular subscriptions by nation from: https://data.worldbank.org/indicator/IT.CEL.SETS.P2?start=1960.
+
+cellular <- read.csv("COVID-19_Final/data/cellular.csv")
+
+cellular <- subset(cellular, COUNTRY %in% Final_Data_Country$COUNTRY)
+
+# I only keep the columns I care about.
+colnames(cellular)
+myvarscellular <- c("cellular_sub", "COUNTRY")
+
+cellular <- cellular[myvarscellular]
+
+Final_Data_Country <- merge(Final_Data_Country, cellular, by = c("COUNTRY"), all=TRUE)
+
+# Now, I add military data from: https://correlatesofwar.org/data-sets/national-material-capabilities. Note the l.y.a. is 2012.
+
+military <- read.csv("COVID-19_Final/data/military.csv")
+
+military <- subset(military, COUNTRY %in% Final_Data_Country$COUNTRY)
+
+# I only keep the columns I care about.
+colnames(military)
+myvarsmilitary <- c("milex", "milper", "irst", "pec", "cinc", "COUNTRY")
+
+military <- military[myvarsmilitary]
+
+Final_Data_Country <- merge(Final_Data_Country, military, by = c("COUNTRY"), all=TRUE)
+
+```
+
+# Adding data on prior deaths from diseases.
+```{r diseases}
+# I now add data on diseases (aggregated from 2015-2018) from the WHO ICD10: https://www.who.int/classifications/icd/icdonlineversions/en/. 
+diseases <- read.csv("COVID-19_Final/data/ICD_Deaths_Final.csv")
+
+diseases <- subset(diseases, COUNTRY %in% Final_Data_Country$COUNTRY)
+
+Final_Data_Country <- merge(Final_Data_Country, diseases, by = c("COUNTRY"), all=TRUE)
+
+Final_Data_Country <- Final_Data_Country[order(Final_Data_Country$COUNTRY, Final_Data_Country$Date),]
+```
+
+# Performing final edits and saving the dataframe (plus filtering the sample).
+```{r editing}
+# Labelling our variables.
+label(Final_Data_Country$C1_School.closing) <- "Record Closings of Schools and Universities (0 - No Measures; 1 - Recommended Closing; 2 - Required Closing (some levels); 3 - Required Closing (all levels))"
+label(Final_Data_Country$C1_Flag) <- "Targeted vs. General School Closings (0 - Targeted; 1 - General)"
+label(Final_Data_Country$C2_Workplace.closing) <- "Record Closings of Workplaces (0 - No Measures; 1 - Recommended Closing; 2 - Required Closing (some sectors); 3 - Required Closing (all but essential workers))"
+label(Final_Data_Country$C2_Flag) <- "Targeted vs. General Workplace Closings (0 - Targeted; 1 - General)"
+label(Final_Data_Country$C3_Cancel.public.events) <- "Record Closings of Public Events (0 - No Measures; 1 - Recommended Cancelling; 2 - Required Cancelling)"
+label(Final_Data_Country$C3_Flag) <- "Targeted vs. General Public Event Closings (0 - Targeted; 1 - General)"
+label(Final_Data_Country$C4_Restrictions.on.gatherings) <- "Restrictions on Public Gatherings (0 - No Measures; 1 - Restrictions on Gatherings of 1000 + people; 2 - Restrictions on Gatherings of 100-1000 people; 3 - Restrictions on Gatherings of 10-100 people; 4 - Restrictions on Gatherings of < 10 people)"
+label(Final_Data_Country$C4_Flag) <- "Targeted vs. General Public Gathering Restrictions (0 - Targeted; 1 - General)"
+label(Final_Data_Country$C5_Close.public.transport) <- "Record Closings of Public Transport (0 - No Measures; 1 - Recommended Closing (means of transport reduced); 2 - Required Closing (prohibit public transit operations))"
+label(Final_Data_Country$C5_Flag) <- "Targeted vs. General Public Transport Closings (0 - Targeted; 1 - General)"
+label(Final_Data_Country$C6_Stay.at.home.requirements) <- "Lockdown Measures (0 - No Measures; 1 - Recommendeded; 2 - Lax Lockdown (allows for exercise, shopping, and essential trips); 3 - Strict Lockdown)"
+label(Final_Data_Country$C6_Flag) <- "Targeted vs. General Lockdown (0 - Targeted; 1 - General)"
+label(Final_Data_Country$C7_Restrictions.on.internal.movement) <- "Record Restrictions on Internal Movement (0 - No Measures; 1 - Recommend Movement Restriction (reduce means of transport); 2 - Restrict Movement (prohibit internal movement))"
+label(Final_Data_Country$C7_Flag) <- "Targeted vs. General Restrictions on Internal Movement (0 - Targeted; 1 - General)"
+label(Final_Data_Country$C8_International.travel.controls) <- "Record Restrictions on International Travel (0 - No Measures; 1 - Screening; 2 - Quarantine on High-Risk Regions; 3 - Ban on High-Risk Regions)"
+label(Final_Data_Country$E1_Income.support) <- "Income Support (0 - None; 1 - Govt. Funds < 50% of Lost Salary; 2 - Govt. Funds > 50% of Lost Salary)"
+label(Final_Data_Country$E1_Flag) <- "Targeted vs. General Income Support"
+label(Final_Data_Country$E2_Debt.contract.relief) <- "Debt Relief (0 - None; 1 - Narrow Relief (specific kinds of contracts); 2 - Broad Relief)"
+label(Final_Data_Country$E3_Fiscal.measures) <- "Value of Fiscal Stimuli, Including Spending or Tax Cuts (in USD)"
+label(Final_Data_Country$H1_Public.information.campaigns) <- "Record Presence of Public Information Campaigns (0 - No; 1 - Public Officials Urge Caution; 2 - Coordinated Public Information Campaign)"
+label(Final_Data_Country$H1_Flag) <- "Targeted vs. General Public Information Campaigns (0 - Targeted; 1 - General)"
+label(Final_Data_Country$H2_Testing.policy) <- "Who Can Get Tested (0 - No Testing Policy; 1 - Testing for those with a) Symptoms AND b) Meet Given Criteria (key workers; admitted to hospital; came into contact with known patient; returned from overseas); 2 - Testing of anyone showing symptoms; 3 - Open Public Testing ('drive-through testing')"
+label(Final_Data_Country$H3_Contact.tracing) <- "Contact Tracing (0 - No Contact Tracing; 1 - Limited Contact Tracing; 2 - Comprehensive Contact Tracing)"
+label(Final_Data_Country$H4_Emergency.investment.in.healthcare) <- "Value of New Short-Term Spending on Health (in USD)"
+label(Final_Data_Country$H5_Investment.in.vaccines) <- "Value of Investment (in USD)"
+label(Final_Data_Country$StringencyIndex) <- "Index for Government Stringency (calculated using C1-S8 + H1)"
+label(Final_Data_Country$LegacyStringencyIndex) <- "Legacy Index for Government Stringency (converts new calculation to prior calculation for our 'original' Stringency Index)"
+label(Final_Data_Country$Oxford_Cases) <- "Cumulative Sum of Confirmed Cases by Country (Oxford)"
+label(Final_Data_Country$Oxford_Deaths) <- "Cumulative Sum of Deaths by Country (Oxford)"
+label(Final_Data_Country$prop65) <- "Proportion of the Population Above Age 65"
+label(Final_Data_Country$propurban) <- "Proportion of Population in Urban Areas"
+label(Final_Data_Country$popdensity) <- "People per 100 Sq. Km. of Land Area"
+label(Final_Data_Country$arrivals) <- "Number of Tourist Arrivals"
+label(Final_Data_Country$departures) <- "Number of Tourist Departures"
+label(Final_Data_Country$vul_emp) <- "Percentage of Population in Vulnerable Employment"
+label(Final_Data_Country$GNI) <- "GNI per capita (current USD - Atlas Method) "
+label(Final_Data_Country$health_exp) <- "Health Expenditure Per Capita"
+label(Final_Data_Country$pollution) <- "PM2.5 Air Pollution (micrograms per cubic meter)"
+label(Final_Data_Country$EUI_democracy) <- "Democracy scores from the Economist Intelligence Unit"
+label(Final_Data_Country$freedom_house) <- "Democracy scores from Freedom House"
+label(Final_Data_Country$milex) <- "Military expenditures (thousands of GBP)"
+label(Final_Data_Country$milper) <- "Military personnel (thousands of soldiers)"
+label(Final_Data_Country$irst) <- "Iron and steel production (thousands of ton)"
+label(Final_Data_Country$pec) <- "Primary energy consumption (thousands of coal-ton equivalents)"
+label(Final_Data_Country$cinc) <- "Composite Index of National Capability score"
+
+# For now, we are restricting our analysis to OECD/EM markets. I do so below, using a loose definition of EMs from: https://www.msci.com/documents/10199/c0db0a48-01f2-4ba9-ad01-226fd5678111 and advanced economies from: https://www.imf.org/external/pubs/ft/weo/2020/01/weodata/groups.htm. Provinces of China (Taiwan, Macao, Hong Kong) and Italy (San Marino) are aggregated to the national level. Note that Lithuania, while included here for visualizations, does not have government responses data and is thus not run in the regressions.
+
+Final_Data_Country <- subset(Final_Data_Country, (COUNTRY == "Argentina" | COUNTRY == "Australia" | COUNTRY == "Austria" | COUNTRY == "Belgium" | COUNTRY == "Brazil" | COUNTRY == "Canada" | COUNTRY == "Chile" | COUNTRY == "China" | COUNTRY == "Colombia" | COUNTRY == "Cyprus" | COUNTRY == "Czechia" |COUNTRY == "Denmark" | COUNTRY == "Egypt" | COUNTRY == "Estonia" | COUNTRY == "Finland" | COUNTRY == "France" | COUNTRY == "Germany" | COUNTRY == "Greece" | COUNTRY == "Hungary" | COUNTRY == "Iceland" | COUNTRY == "India" | COUNTRY == "Indonesia" | COUNTRY == "Ireland" | COUNTRY == "Israel" | COUNTRY == "Italy" | COUNTRY == "Japan" | COUNTRY == "Jordan" | COUNTRY == "Korea, South" | COUNTRY == "Kuwait" | COUNTRY == "Latvia" | COUNTRY == "Lithuania" | COUNTRY == "Luxembourg" | COUNTRY == "Malaysia" | COUNTRY == "Malta" | COUNTRY == "Mexico" | COUNTRY == "Morocco" | COUNTRY == "Netherlands" | COUNTRY == "New Zealand" |COUNTRY == "Norway" | COUNTRY == "Peru" | COUNTRY == "Philippines" | COUNTRY == "Poland" | COUNTRY == "Portugal" | COUNTRY == "Qatar" | COUNTRY == "Russia" | COUNTRY == "Saudi Arabia" | COUNTRY == "Singapore" | COUNTRY == "Slovakia" | COUNTRY == "Slovenia" |  COUNTRY == "South Africa" | COUNTRY == "Spain" | COUNTRY == "Sweden" | COUNTRY == "Switzerland" | COUNTRY == "Thailand" | COUNTRY == "Turkey" | COUNTRY == "United Arab Emirates" | COUNTRY == "United Kingdom" | COUNTRY == "US" | COUNTRY == "Vietnam"))
+
+# Next, I label and clean the final dataset. This is excluded for brevity.
+```
+
+# We now have a final panel dataset. I import the saved CSV, to ensure there are no discrepancies.
+```{r saving}
+remove(Final_Data_Country)
+
+#  Note that I change the column types so reader can properly parse the data. This dataset also includes lagged variables for the mortality rate, which are not generated in the code for brevity.
+
+library(readr)
+Final_Data_Country <- read_csv(("COVID-19_Final/data/Final_Data_Country.csv"), 
+  col_types = cols(`E2_Debt.contract.relief` = col_number(),
+                   `Lagged_Debt_Relief_One_Week` = col_number(),
+                   `Lagged_Debt_Relief_Two_Weeks` = col_number(),
+                   `Lagged_Debt_Relief_Three_Weeks` = col_number(),
+                   `E1_Income.support` = col_number(),
+                   `Lagged_Income_Support_One_Week` = col_number(),
+                   `Lagged_Income_Support_Two_Weeks` = col_number(),
+                   `Lagged_Income_Support_Three_Weeks` = col_number()))
+Final_Data_Country <- Final_Data_Country[order(Final_Data_Country$COUNTRY, Final_Data_Country$Date),]
+
+```
