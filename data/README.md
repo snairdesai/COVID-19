@@ -1,5 +1,7 @@
 The data folder contains all the raw, temporary, and final data files used for analysis (as well as files which have been pulled, but not yet integrated into the analysis). For a more detailed explanation of the data and its usage, see the "Data" and "Empirical Specification" sections of the [NBER Working Paper](https://www.nber.org/papers/w27185).
 
+* Note that all COVID-related variables (cases, mortality, etc.) are only available from the start of the Hopkins data, on January 23rd, 2020; while the Oxford government data begins on January 1, 2020. *
+
 **Raw Data**
 
 1. The [spatial_data](http://www.cepii.fr/cepii/en/bdd_modele/bdd.asp) folder contains distance and locational data on the sample. Note this data is not incorporated in the first round of analysis.
