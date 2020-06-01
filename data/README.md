@@ -1,6 +1,6 @@
 The data folder contains all the raw, temporary, and final data files used for analysis (as well as files which have been pulled, but not yet integrated into the analysis). For a more detailed explanation of the data and its usage, see the "Data" and "Empirical Specification" sections of the [NBER Working Paper](https://www.nber.org/papers/w27185).
 
-* Note that all COVID-related variables (cases, mortality, etc.) are only available from the start of the Hopkins data, on January 23rd, 2020; while the Oxford government data begins on January 1, 2020. *
+*Note that all COVID-related variables (cases, mortality, etc.) are only available from the start of the Hopkins data, on January 23rd, 2020; while the Oxford government data begins on January 1, 2020.*
 
 **Raw Data**
 
@@ -172,8 +172,7 @@ The data folder contains all the raw, temporary, and final data files used for a
 
 7. surv.dat_weekly.csv is the second of the two datasets used to generate results for the cross-sectional analysis of weekly mortality rates (main results). It is generated from datweekly_cs.csv, but incorporates new variables (these are the same variables as surv.dat.csv):
 
-      
-**In addition to the above files, we also create a series of other temporary data files solely for the purpose of analysis. These datasets include newly constructed variables, summarized below and in the Appendix of the Working Paper. To view the complete calculations for these variables, please reference the Working Paper or Markdown File.
+**Summary of Newly Constructed Variables**
 
     A. Early Mortality --> Cumulative mortality rate in the week following the first death.
     B. Early Mortality Growth --> Growth rate of new mortality rate in the week following the first death.
