@@ -12,7 +12,7 @@ The relevant R Markdown file is "COVID-19_Country_6-01-20.rmd" which is fully re
 
 # DESCRIPTION OF THE FOLDERS
 
-The "data" folder includes all of the initial and manipulated data used in the analysis. Details on where the data was pulled from can be found in the relevant chunks of the Markdown file, in the text documents of the working paper, and in the associated README file. Credit for the data goes to all associated sources, which are cited in the paper.
+The "data" folder includes all of the initial and manipulated data used in the analysis. Details on where the data was pulled from can be found in the relevant chunks of the Markdown file, in the text documents of the working paper, and in the associated README file. Credit for the raw data goes to all associated sources, which are cited in the paper.
 
 In addition to the data folder, the repository also hosts the "csse_covid_19_time_series", "government_data", and "spatial_data" folders. The data from these folders is also uploaded to the central data folder, but have been included separately for ease of access. These represent our primary raw data files. The first file contains the COVID data pulled from John Hopkins CSSE. The second file contains the government data pulled from the Oxford Government Response Tracker. The last of these folders (spatial_data) was not included in this version of the working paper, but will be used in subsequent rounds of analysis.
 
@@ -25,3 +25,8 @@ There are also two files (both as Markdowns and knitted HTMLs), detailing the te
 For convenience, an additional folder ("previous_versions") has been uploaded with prior versions of the markdown file, and the initial plans for analysis.
 
 All folders in the repository are accompanied by a detailed README file explaining the contents.
+
+                                                 **CONTACT**
+
+Sameer Nair-Desai                               Rashad Ahmed                                Weining Xin
+snairdesa@gmail.com                             rashadah@usc.edu                            weiningx@usc.edu
