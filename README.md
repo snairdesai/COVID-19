@@ -20,7 +20,7 @@ The "output_png" folder includes all of our static figures. All interative HTML 
 
 The "reg_output" folder includes all of the tables from the regression analysis, which have been clearly labelled for ease of access. You will be able to find where the tables are generated in the markdown file by using the search function. The regression outputs have been divided into two sub-folders, for the weekly mortality growth rate (our dependent variable for our primary analysis) and the cumulative mortality growth (our dependent variable of choice for our secondary analysis, in the Online Appendix).
 
-There are also two files (both as Markdowns and knitted HTMLs), detailing the text of the working paper ("COVID-19_texts.rmd"; "COVID-19_texts.html") and analysis/figures included in the paper ("COVID-19_numbers.rmd"; "COVID-19_numbers.html"). These are located in the "text" and "analysis" folders respectively.
+There are also two files (both as Markdowns and knitted HTMLs), detailing the text of the working paper ("COVID-19_texts.rmd"; "COVID-19_texts.html") These are located in the "text" folder respectively.
 
 For convenience, an additional folder ("previous_versions") has been uploaded with prior versions of the markdown file, and the initial plans for analysis.
 
@@ -28,10 +28,12 @@ All folders in the repository are accompanied by a detailed README file explaini
 
 **CONTACT**
 
-Sameer Nair-Desai                               
+Sameer Nair-Desai 
+
 snairdesa@gmail.com   
 
-Rashad Ahmed                               
+Rashad Ahmed   
+
 rashadah@usc.edu                           
 
 Weining Xin
