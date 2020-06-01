@@ -26,7 +26,13 @@ For convenience, an additional folder ("previous_versions") has been uploaded wi
 
 All folders in the repository are accompanied by a detailed README file explaining the contents.
 
-                                                 **CONTACT**
+**CONTACT**
 
-Sameer Nair-Desai                               Rashad Ahmed                                Weining Xin
-snairdesa@gmail.com                             rashadah@usc.edu                            weiningx@usc.edu
+Sameer Nair-Desai                               
+snairdesa@gmail.com   
+
+Rashad Ahmed                               
+rashadah@usc.edu                           
+
+Weining Xin
+weiningx@usc.edu
