@@ -1,0 +1,382 @@
+
+# Import library
+```{r}
+#getwd()
+library(lubridate)
+library(zoo)
+library(quantmod)
+library(fBasics)
+library(tseries)
+library(sandwich)
+library(lmtest)
+library(lattice)
+library(xtable)
+library(vars)
+library(plyr)
+library(gridExtra)
+library(corrplot)
+library(ggplot2)
+library(reshape2)
+library(data.table)
+library(rvest)
+library(plm)
+library(tidyverse)
+library(stringr)
+library(stargazer)
+
+```
+
+### Read Final_Data_Country
+```{r}
+dat<-read.csv("./Data/Final_Data_Country.csv",header=T,sep=',')
+# Remove factor variables for government responses and lagged variables
+dat<-dat %>% select(-contains("Flag"))
+dat<-dat %>% select(-contains("Lagged"))
+dat$latitude <- NULL
+dat$longitude <- NULL
+```
+
+### Merge global preference survey data to Final_Data_Country
+```{r}
+gps.country <- read.dta("./Data/GPS_dataset_country_level/country_v11.dta")
+# Change country names for merge
+gps.country[which(gps.country$country == "South Korea"),"country"] <- "Korea, South"
+gps.country[which(gps.country$country == "Czech Republic"),"country"] <- "Czechia"
+gps.country[which(gps.country$country == "United States"),"country"] <- "US"
+
+gps.individual <- read.dta("./Data/GPS_dataset_individual_level/individual_v11_new.dta")
+# Change country names for merge
+gps.individual[which(gps.individual$country == "South Korea"),"country"] <- "Korea, South"
+gps.individual[which(gps.individual$country == "Czech Republic"),"country"] <- "Czechia"
+gps.individual[which(gps.individual$country == "United States"),"country"] <- "US"
+
+gps.individual$age <- as.character(gps.individual$age)
+gps.individual[which(gps.individual$age == "99 99+"), "age"] <- "99"
+gps.individual[which(gps.individual$age == "100 (Refused"), "age"] <- NA
+gps.individual$age <- as.numeric(gps.individual$age)
+gps.individual.pop65 <- gps.individual[which(!is.na(gps.individual$age) & gps.individual$age > 65), ]
+gps.individual.pop65 <- gps.individual.pop65[which(!is.na(gps.individual.pop65$trust)),]
+gps.country.pop65 <- ddply(gps.individual.pop65, "country", function(X) data.frame(wm.trust = weighted.mean(X$trust, X$wgt)))
+
+colnames(gps.country)[1] <- "COUNTRY"
+dat <- merge(dat, gps.country, by=c("COUNTRY"), all.x=TRUE)
+colnames(gps.country.pop65)[1] <- "COUNTRY"
+dat <- merge(dat, gps.country.pop65, by=c("COUNTRY"), all.x=TRUE)
+```
+
+### Rename variables and create some new variables
+```{r}
+p.dat_cum <- pdata.frame(dat, index = c("COUNTRY", "Date"))
+p.dat_cum$Date<-as.Date(p.dat_cum$Date,"%Y-%m-%d")
+#reorder
+p.dat_cum <- p.dat_cum[order(p.dat_cum$Date),]
+p.dat_cum <- p.dat_cum[order(p.dat_cum$COUNTRY),]
+
+colnames(p.dat_cum)[colnames(p.dat_cum) == "Total_Cases_Country"] <- "Total_Case_Country"
+colnames(p.dat_cum)[colnames(p.dat_cum) == "Total_Deceased_Country"] <- "Total_Death_Country"
+colnames(p.dat_cum)[colnames(p.dat_cum) == "New_Confirmed_Country"] <- "New_Case_Country"
+colnames(p.dat_cum)[colnames(p.dat_cum) == "New_Total_Deceased_Country"] <- "New_Death_Country"
+colnames(p.dat_cum)[colnames(p.dat_cum) == "Total_Mortality_Rate_Per_Capita"] <- "Total_Mortality_Rate"
+colnames(p.dat_cum)[colnames(p.dat_cum) == "New_Mortality_Rate_Per_Capita"] <- "New_Mortality_Rate"
+colnames(p.dat_cum)[colnames(p.dat_cum) == "Total_Cases_Country_Per_Capita"] <- "Total_Case_Rate"
+colnames(p.dat_cum)[colnames(p.dat_cum) == "rolling_average_confirmed"] <- "RollingAverage_New_Case_Country"
+colnames(p.dat_cum)[colnames(p.dat_cum) == "rolling_average_deceased"] <- "RollingAverage_New_Death_Country"
+colnames(p.dat_cum)[colnames(p.dat_cum) == "total_rolling_average_mortality"] <- "RollingAverage_Total_Mortality_Rate"
+colnames(p.dat_cum)[colnames(p.dat_cum) == "new_rolling_average_mortality"] <- "RollingAverage_New_Mortality_Rate"
+colnames(p.dat_cum)[colnames(p.dat_cum) == "EUI_democracy"] <- "EIU_Democracy"
+p.dat_cum$RollingAverage_Total_Mortality_Rate <- NULL
+p.dat_cum$longitude <- NULL
+
+p.dat_cum$New_Case_Rate = p.dat_cum$New_Case_Country/p.dat_cum$Population
+
+p.dat_cum <- p.dat_cum %>%
+  group_by(COUNTRY) %>%
+  mutate(RollingAverage_New_Case_Rate = frollmean(New_Case_Rate, 7,na.rm=TRUE))
+
+p.dat_cum <- p.dat_cum %>%
+  group_by(COUNTRY) %>%
+  mutate(Total_Mortality_Rate_Growth = log(Total_Mortality_Rate) - Lag(log(Total_Mortality_Rate),7))
+
+p.dat_cum <- p.dat_cum %>%
+  group_by(COUNTRY) %>%
+  mutate(Total_Case_Rate_Growth = log(Total_Case_Rate) - Lag(log(Total_Case_Rate),7))
+
+p.dat_cum <- p.dat_cum %>%
+  group_by(COUNTRY) %>%
+  mutate(New_Case_Rate_Growth = log(RollingAverage_New_Case_Rate) - Lag(log(RollingAverage_New_Case_Rate),7))
+
+p.dat_cum <- p.dat_cum %>%
+  group_by(COUNTRY) %>%
+  mutate(New_Mortality_Rate_Growth = log(RollingAverage_New_Mortality_Rate) - Lag(log(RollingAverage_New_Mortality_Rate),7))
+
+p.dat_cum <- p.dat_cum %>%
+  group_by(COUNTRY) %>%
+  mutate(Total_Mortality_Rate_Growth_lag1 = dplyr::lag(Total_Mortality_Rate_Growth,1))
+
+p.dat_cum <- p.dat_cum %>%
+  group_by(COUNTRY) %>%
+  mutate(Total_Mortality_Rate_Growth_lead7 = dplyr::lead(Total_Mortality_Rate_Growth,7))
+
+p.dat_cum <- p.dat_cum %>%
+  group_by(COUNTRY) %>%
+  mutate(Total_Mortality_Rate_Growth_lead14 = dplyr::lead(Total_Mortality_Rate_Growth,14))
+
+p.dat_cum <- p.dat_cum %>%
+  group_by(COUNTRY) %>%
+  mutate(Total_Mortality_Rate_Growth_lead21 = dplyr::lead(Total_Mortality_Rate_Growth,21))
+
+p.dat_cum <- p.dat_cum %>%
+  group_by(COUNTRY) %>%
+  mutate(Total_Mortality_Rate_Growth_lead28 = dplyr::lead(Total_Mortality_Rate_Growth,28))
+
+p.dat_cum$respiratory_deaths_rate <- 1/3*(p.dat_cum$respiratory_deaths/p.dat_cum$Population)
+```
+
+### Reorder columns
+```{r}
+p.dat_cum <- p.dat_cum %>%
+ select(c("COUNTRY", "X", "Date",
+          "Total_Case_Country", "Total_Death_Country", "New_Case_Country", "New_Death_Country", "Population",
+          "Total_Case_Rate", "Total_Mortality_Rate", "New_Case_Rate", "New_Mortality_Rate", 
+          "RollingAverage_New_Case_Country", "RollingAverage_New_Death_Country", 
+          "RollingAverage_New_Case_Rate", "RollingAverage_New_Mortality_Rate", 
+          "Total_Case_Rate_Growth", "Total_Mortality_Rate_Growth", 
+          "New_Case_Rate_Growth", "New_Mortality_Rate_Growth"), everything())
+
+p.dat_cum$Total_Case_Rate_Growth[is.nan(p.dat_cum$Total_Case_Rate_Growth)] <- NA
+p.dat_cum$Total_Mortality_Rate_Growth[is.nan(p.dat_cum$Total_Mortality_Rate_Growth)] <- NA
+
+p.dat_cum$New_Case_Rate_Growth[is.nan(p.dat_cum$New_Case_Rate_Growth)] <- NA
+p.dat_cum$New_Mortality_Rate_Growth[is.nan(p.dat_cum$New_Mortality_Rate_Growth)] <- NA
+
+p.dat_cum$New_Mortality_Rate_Growth[is.infinite(-p.dat_cum$New_Mortality_Rate_Growth)] <- Inf
+
+colnames(p.dat_cum)
+```
+
+### Baseline regressions
+```{r}
+regmod <- list()
+se_t_stats <- list()
+se <- list()
+
+###baseline projection regressions, remove 'infinite' values. two-way FE, HAC robust SEs, clustered on country
+for (day_lead in seq(14,28,7)){
+   p.dat_cum <- p.dat_cum %>%
+      group_by(COUNTRY) %>%
+      mutate(Total_Mortality_Rate_Growth_lead_temp = dplyr::lead(Total_Mortality_Rate_Growth,day_lead))
+   
+   p.dat_cum <- p.dat_cum %>% ungroup()
+   p.dat_cum <- pdata.frame(p.dat_cum, index = c("COUNTRY", "Date"))
+   p.dat_cum <- p.dat_cum[order(p.dat_cum$Date),]
+   p.dat_cum <- p.dat_cum[order(p.dat_cum$COUNTRY),]
+   
+   regmod[[day_lead/7-1]] <- plm(lead(Total_Mortality_Rate_Growth,day_lead)~StringencyIndex+Total_Mortality_Rate_Growth_lag1,method="pooling",effect="twoways",data=p.dat_cum[which(!is.infinite(p.dat_cum$Total_Mortality_Rate_Growth_lag1) & !is.infinite(p.dat_cum$Total_Mortality_Rate_Growth_lead_temp)),],na.action="na.exclude")
+   se[[day_lead/7-1]] <- coeftest(regmod[[day_lead/7-1]], vcov = vcovHC(regmod[[day_lead/7-1]], type = "HC1", cluster="group"))
+   se_t_stats[[day_lead/7-1]] <- coeftest(regmod[[day_lead/7-1]], vcov = vcovHC(regmod[[day_lead/7-1]], type = "HC1", cluster="group"))[,2]
+   
+}
+```
+
+
+### HTML output of baseline regression results
+```{r,warning=FALSE, results='hide',message=FALSE}
+stargazer(digits=6,regmod,type="html",se=se_t_stats,out=file.path("Outputs_revision","Table_Appendix_baseline_panel_output.htm"),
+          column.labels=c("Cum. Mortality Growth (t+14)", "Cum. Mortality Growth (t+21)", "Cum. Mortality Growth (t+28)"),
+          dep.var.labels.include = FALSE,
+          covariate.labels=c("Stringency (t)", "Cum. Mortality Growth (t-1)"), df = FALSE,omit.stat="adj.rsq",notes = c("*,**,*** correspond to 10%, 5% and 1% significance, respectively.","HAC robust standard errors, clustered by country. Time and Country FEs."),notes.append=F,notes.align ="l",title="Local Projection Regressions",add.lines = list(c("Fixed effects?", "Y", "Y","Y")))
+```
+
+### Plots
+```{r}
+### plot of 10-unit increase in Stringency effects over time on future mortality growth
+p.dat_weekly<-c(coef(regmod[[1]])[1],coef(regmod[[2]])[1],coef(regmod[[3]])[1])
+p.dat_weekly<-cbind(p.dat_weekly,p.dat_weekly+1.96*c(se[[1]][1,2],se[[2]][1,2],se[[3]][1,2]))
+p.dat_weekly<-cbind(p.dat_weekly,p.dat_weekly[,1]-1.96*c(se[[1]][1,2],se[[2]][1,2],se[[3]][1,2]))
+colnames(p.dat_weekly)<-c("mean","upper","lower")
+p.dat_weekly<-data.frame(p.dat_weekly)*10*100
+                                                                                   
+p0<-ggplot(data=p.dat_weekly,aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean))+geom_point(size=4,shape=21,fill="grey")+geom_hline(yintercept=0,linetype=2)+xlab("")+theme_bw()+ylab("Effect on New Mortality Growth (%)")+geom_errorbar(aes(ymin=lower,ymax=upper))+ggtitle("Average Impact")
+
+ggsave(file.path("Outputs_revision","Figure_Appendix_baseline_panel.png"), width = 5, height = 5)
+                                                                                                                
+p0
+```
+
+
+### Loop to generate heterogeneity regression results
+```{r}
+###baseline projection regressions, remove 'infinite' values. two-way FE, HAC robust SEs, clustered on country
+var.list <- c("prop65", "propurban", "Latitude", "Longitude", "popdensity", "arrivals", "departures", "vul_emp", "GNI", "health_exp", "pollution", "EIU_Democracy", "trust", "risktaking")
+label.list <- c("Proportion 65+", "Proportion Urban", "Latitude", "Longitude", "Population Density", "Log(Arrivals)", "Log(Departures)", "Vulnerable Employees", "Log(GNI per capita)", "Health Expenditures", "Pollution", "EIU Democracy", "Trust", "Risk Taking")
+
+p.dat_weekly.list <- list()
+s.list <- list()
+
+for (i in c(1:length(var.list))){
+
+   var <- var.list[i]
+   label <- label.list[i]
+   
+   if (var == "arrivals" || var == "departures" || var == "GNI"){
+      regmoda<-plm(as.formula(paste("Total_Mortality_Rate_Growth_lead14~StringencyIndex","+Total_Mortality_Rate_Growth_lag1","+StringencyIndex:","log(",var,")")),method="pooling",effect="twoways",data=p.dat_cum[which(!is.infinite(p.dat_cum$Total_Mortality_Rate_Growth_lag1) & !is.infinite(p.dat_cum$Total_Mortality_Rate_Growth_lead14)),],na.action="na.exclude")
+      se.a<-coeftest(regmoda, vcov = vcovHC(regmoda, type = "HC1", cluster="group"))
+      regmodb<-plm(as.formula(paste("Total_Mortality_Rate_Growth_lead21~StringencyIndex","+Total_Mortality_Rate_Growth_lag1","+StringencyIndex:","log(",var,")")),method="pooling",effect="twoways",data=p.dat_cum[which(!is.infinite(p.dat_cum$Total_Mortality_Rate_Growth_lag1) & !is.infinite(p.dat_cum$Total_Mortality_Rate_Growth_lead21)),],na.action="na.exclude")
+      se.b<-coeftest(regmodb, vcov = vcovHC(regmodb, type = "HC1", cluster="group"))
+      regmodc<-plm(as.formula(paste("Total_Mortality_Rate_Growth_lead28~StringencyIndex","+Total_Mortality_Rate_Growth_lag1","+StringencyIndex:","log(",var,")")),method="pooling",effect="twoways",data=p.dat_cum[which(!is.infinite(p.dat_cum$Total_Mortality_Rate_Growth_lag1) & !is.infinite(p.dat_cum$Total_Mortality_Rate_Growth_lead28)),],na.action="na.exclude")
+      se.c<-coeftest(regmodc, vcov = vcovHC(regmodc, type = "HC1", cluster="group"))
+   }else{
+   regmoda<-plm(as.formula(paste("Total_Mortality_Rate_Growth_lead14~StringencyIndex","+Total_Mortality_Rate_Growth_lag1","+StringencyIndex:",var)),method="pooling",effect="twoways",data=p.dat_cum[which(!is.infinite(p.dat_cum$Total_Mortality_Rate_Growth_lag1) & !is.infinite(p.dat_cum$Total_Mortality_Rate_Growth_lead14)),],na.action="na.exclude")
+   se.a<-coeftest(regmoda, vcov = vcovHC(regmoda, type = "HC1", cluster="group"))
+   regmodb<-plm(as.formula(paste("Total_Mortality_Rate_Growth_lead21~StringencyIndex","+Total_Mortality_Rate_Growth_lag1","+StringencyIndex:",var)),method="pooling",effect="twoways",data=p.dat_cum[which(!is.infinite(p.dat_cum$Total_Mortality_Rate_Growth_lag1) & !is.infinite(p.dat_cum$Total_Mortality_Rate_Growth_lead21)),],na.action="na.exclude")
+   se.b<-coeftest(regmodb, vcov = vcovHC(regmodb, type = "HC1", cluster="group"))
+   regmodc<-plm(as.formula(paste("Total_Mortality_Rate_Growth_lead28~StringencyIndex","+Total_Mortality_Rate_Growth_lag1","+StringencyIndex:",var)),method="pooling",effect="twoways",data=p.dat_cum[which(!is.infinite(p.dat_cum$Total_Mortality_Rate_Growth_lag1) & !is.infinite(p.dat_cum$Total_Mortality_Rate_Growth_lead28)),],na.action="na.exclude")
+   se.c<-coeftest(regmodc, vcov = vcovHC(regmodc, type = "HC1", cluster="group"))
+   }
+   
+   stargazer(digits=6,regmoda,regmodb,regmodc,type="html",
+             se=list(se.a[,2],se.b[,2],se.c[,2]),out=paste("Table_Appendix_panel_",var,"_weekly_reg_output_benchmark.htm", sep = ""),
+             dep.var.labels.include = FALSE,
+             column.labels=c("Cum. Mortality Growth (t+14)", "Cum. Mortality Growth (t+21)", "Cum. Mortality Growth (t+28)"),
+             covariate.labels=c("Stringency (t)","Cum. Mortality Growth (t-1)",paste("Stringency (t) X ", label)), 
+             df = FALSE,omit.stat="adj.rsq",
+             notes = c("*,**,*** correspond to 10%, 5% and 1% significance, respectively.","HAC robust standard errors, clustered by country. Time and Country FEs."),notes.append=F,notes.align ="l",
+             title=paste("Heterogeneity: ", label),add.lines = list(c("Fixed effects?", "Y","Y","Y")))
+   
+   ### plot of 10-unit increase in Stringency effects over time on future mortality growth
+   p.dat<-c(coef(regmoda)[1],coef(regmodb)[1],coef(regmodc)[1])
+   i.dat<-c(coef(regmoda)[3],coef(regmodb)[3],coef(regmodc)[3])
+   effect.dat<-cbind(p.dat, i.dat)
+   #p.dat_weekly<-cbind(p.dat_weekly,p.dat_weekly+1.96*c(se.a[2,2],se.b[2,2],se.c[2,2],se.d[2,2]))
+   #p.dat_weekly<-cbind(p.dat_weekly,p.dat_weekly[,1]-1.96*c(se.a[2,2],se.b[2,2],se.c[2,2],se.d[2,2]))
+   colnames(effect.dat)<-c("mean.1", "mean.2")
+   
+   p.dat.list[[i]]<-data.frame(effect.dat)*10*100
+   
+   ###figure out the 25% percentile  and 75% percentile of elderly population rate across countries, to compare effects of a 10-unit rise in stringency level
+   if (var == "arrivals" || var == "departures" || var == "GNI"){
+      
+   s.list[[i]] <- summary(unique(log(p.dat_cum[[var]])))
+   }else{
+      s.list[[i]] <- summary(unique(p.dat_cum[[var]]))
+   }
+   s.list
+}
+
+```
+
+### Plot Proportion 65+
+```{r}
+   #plot
+   p1 <- ggplot(data=p.dat.list[[1]],aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*19.400))+geom_line(group=1,aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*19.400),linetype=2)+geom_point(size=4,shape=22,fill="red")+geom_hline(yintercept=0,linetype=2)+xlab("")+theme_bw()+ylab("Effect on Cumulative Mortality Growth (%)")+geom_point(size=4,aes(y=mean.1+mean.2*8.283),shape=21,fill="blue")+geom_line(group=1,aes(y=c(mean.1+mean.2*8.283)),linetype=2)+ggtitle(label.list[1])+ylim(-20,10)
+   p1
+   
+```
+
+### Plot Proportion Urban
+```{r}
+   #plot
+   p2 <- ggplot(data=p.dat.list[[2]],aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*86.56))+geom_line(group=1,aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*86.56),linetype=2)+geom_point(size=4,shape=22,fill="red")+geom_hline(yintercept=0,linetype=2)+xlab("")+theme_bw()+ylab("Effect on Cumulative Mortality Growth (%)")+
+   geom_point(size=4,aes(y=mean.1+mean.2*66.47),shape=21,fill="blue")+geom_line(group=1,aes(y=c(mean.1+mean.2*66.47)),linetype=2)+ggtitle(label.list[2])+ylim(-20,10)
+   p2
+```
+
+### Plot Latitude
+```{r}
+   #plot
+   p3 <- ggplot(data=p.dat.list[[3]],aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*50.83))+geom_line(group=1,aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*50.83),linetype=2)+geom_point(size=4,shape=22,fill="red")+geom_hline(yintercept=0,linetype=2)+xlab("")+theme_bw()+ylab("Effect on Cumulative Mortality Growth (%)")+
+   geom_point(size=4,aes(y=mean.1+mean.2*22.01),shape=21,fill="blue")+geom_line(group=1,aes(y=c(mean.1+mean.2*22.01)),linetype=2)+ggtitle(label.list[3])+ylim(-20,10)
+   p3
+   
+```
+
+### Plot Longitude
+```{r}
+   #plot
+   p4 <- ggplot(data=p.dat.list[[4]],aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*49.333))+geom_line(group=1,aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*49.333),linetype=2)+geom_point(size=4,shape=22,fill="red")+geom_hline(yintercept=0,linetype=2)+xlab("")+theme_bw()+ylab("Effect on Cumulative Mortality Growth (%)")+
+   geom_point(size=4,aes(y=mean.1+mean.2*3.342),shape=21,fill="blue")+geom_line(group=1,aes(y=c(mean.1+mean.2*3.342)),linetype=2)+ggtitle(label.list[4])+ylim(-20,10)
+   p4
+```
+
+### Plot Population Density
+```{r}
+   #plot
+   p5 <- ggplot(data=p.dat.list[[5]],aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*223.847))+geom_line(group=1,aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*223.847),linetype=2)+geom_point(size=4,shape=22,fill="red")+geom_hline(yintercept=0,linetype=2)+xlab("")+theme_bw()+ylab("Effect on Cumulative Mortality Growth (%)")+
+   geom_point(size=4,aes(y=mean.1+mean.2*33.375),shape=21,fill="blue")+geom_line(group=1,aes(y=c(mean.1+mean.2*33.375)),linetype=2)+ggtitle(label.list[5])+ylim(-20,10)
+   p5
+```
+
+### Plot Log Arrivals
+```{r}
+   #plot
+   p6 <- ggplot(data=p.dat.list[[6]],aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*16.94))+geom_line(group=1,aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*16.94),linetype=2)+geom_point(size=4,shape=22,fill="red")+geom_hline(yintercept=0,linetype=2)+xlab("")+theme_bw()+ylab("Effect on Cumulative Mortality Growth (%)")+
+   geom_point(size=4,aes(y=mean.1+mean.2*15.30),shape=21,fill="blue")+geom_line(group=1,aes(y=c(mean.1+mean.2*15.30)),linetype=2)+ggtitle(label.list[6])+ylim(-20,10)
+   p6
+```
+
+### Plot Log Departures
+```{r}
+   #plot
+   p7 <- ggplot(data=p.dat.list[[7]],aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*16.79))+geom_line(group=1,aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*16.79),linetype=2)+geom_point(size=4,shape=22,fill="red")+geom_hline(yintercept=0,linetype=2)+xlab("")+theme_bw()+ylab("Effect on Cumulative Mortality Growth (%)")+
+   geom_point(size=4,aes(y=mean.1+mean.2*15.02),shape=21,fill="blue")+geom_line(group=1,aes(y=c(mean.1+mean.2*15.02)),linetype=2)+ggtitle(label.list[7])+ylim(-20,10)
+   p7
+```
+
+### Plot Vulnerable Employees
+```{r}
+   #plot
+   p8 <- ggplot(data=p.dat.list[[8]],aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*21.797))+geom_line(group=1,aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*21.797),linetype=2)+geom_point(size=4,shape=22,fill="red")+geom_hline(yintercept=0,linetype=2)+xlab("")+theme_bw()+ylab("Effect on Cumulative Mortality Growth (%)")+
+   geom_point(size=4,aes(y=mean.1+mean.2*7.407),shape=21,fill="blue")+geom_line(group=1,aes(y=c(mean.1+mean.2*7.407)),linetype=2)+ggtitle(label.list[8])+ylim(-20,10)
+   p8
+```
+
+### Plot Log(GNI per capita)
+```{r}
+   p9 <- ggplot(data=p.dat.list[[9]],aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*10.747))+geom_line(group=1,aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*10.747),linetype=2)+geom_point(size=4,shape=22,fill="red")+geom_hline(yintercept=0,linetype=2)+xlab("")+theme_bw()+ylab("Effect on Cumulative Mortality Growth (%)")+
+   geom_point(size=4,aes(y=mean.1+mean.2*9.242),shape=21,fill="blue")+geom_line(group=1,aes(y=c(mean.1+mean.2*9.242)),linetype=2)+ggtitle(label.list[9])+ylim(-20,10)
+   p9
+```
+
+### Plot Health Expenditures
+```{r}
+   p10 <- ggplot(data=p.dat.list[[10]],aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*4292.73))+geom_line(group=1,aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*4292.73),linetype=2)+geom_point(size=4,shape=22,fill="red")+geom_hline(yintercept=0,linetype=2)+xlab("")+theme_bw()+ylab("Effect on Cumulative Mortality Growth (%)")+
+   geom_point(size=4,aes(y=mean.1+mean.2*542.55),shape=21,fill="blue")+geom_line(group=1,aes(y=c(mean.1+mean.2*542.55)),linetype=2)+ggtitle(label.list[10])+ylim(-20,10)
+   p10
+```
+
+### Plot Pollution
+```{r}
+   p11 <- ggplot(data=p.dat.list[[11]],aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*23.084))+geom_line(group=1,aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*23.084),linetype=2)+geom_point(size=4,shape=22,fill="red")+geom_hline(yintercept=0,linetype=2)+xlab("")+theme_bw()+ylab("Effect on Cumulative Mortality Growth (%)")+
+   geom_point(size=4,aes(y=mean.1+mean.2*10.419),shape=21,fill="blue")+geom_line(group=1,aes(y=c(mean.1+mean.2*10.419)),linetype=2)+ggtitle(label.list[11])+ylim(-20,10)
+   p11
+```
+
+### Plot EIU Democracy
+```{r}
+   p12 <- ggplot(data=p.dat.list[[12]],aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*8.207))+geom_line(group=1,aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*8.207),linetype=2)+geom_point(size=4,shape=22,fill="red")+geom_hline(yintercept=0,linetype=2)+xlab("")+theme_bw()+ylab("Effect on Cumulative Mortality Growth (%)")+
+   geom_point(size=4,aes(y=mean.1+mean.2*6.570),shape=21,fill="blue")+geom_line(group=1,aes(y=c(mean.1+mean.2*6.570)),linetype=2)+ggtitle(label.list[12])+ylim(-20,10)
+   p12
+```
+
+### Plot Trust
+```{r}
+   p13 <- ggplot(data=p.dat.list[[13]],aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*0.28083))+geom_line(group=1,aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*0.28083),linetype=2)+geom_point(size=4,shape=22,fill="red")+geom_hline(yintercept=0,linetype=2)+xlab("")+theme_bw()+ylab("Effect on Cumulative Mortality Growth (%)")+
+   geom_point(size=4,aes(y=mean.1+mean.2*-0.13294),shape=21,fill="blue")+geom_line(group=1,aes(y=c(mean.1+mean.2*-0.13294)),linetype=2)+ggtitle(label.list[13])+ylim(-20,10)
+   p13
+```
+
+### Plot Risk Taking
+```{r}
+   p14 <- ggplot(data=p.dat.list[[14]],aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*0.06918))+geom_line(group=1,aes(x=c("2 weeks","3 weeks","4 weeks"),y=mean.1+mean.2*0.06918),linetype=2)+geom_point(size=4,shape=22,fill="red")+geom_hline(yintercept=0,linetype=2)+xlab("")+theme_bw()+ylab("Effect on Cumulative Mortality Growth (%)")+
+   geom_point(size=4,aes(y=mean.1+mean.2*-0.15774),shape=21,fill="blue")+geom_line(group=1,aes(y=c(mean.1+mean.2*-0.15774)),linetype=2)+ggtitle(label.list[14])+ylim(-20,10)
+   p14
+```
+
+### Arrange all plots
+```{r}
+
+p.all <- grid.arrange(p1, p2, p3, p4, p5, p6, p7, p8, p9, p10, p11, p12, ncol=4,nrow=3)
+ggsave(file.path("Outputs_revision","Figure_Appendix_heterogeneity.png"), p.all, width = 12, height = 10)
+
+```
+
